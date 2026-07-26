@@ -73,7 +73,7 @@ const TYPE_HINTS: Record<string, string> = {
   newapi: "New API 后台「个人设置」的系统访问令牌 + 用户 ID；地址填站点根地址。",
   "newapi-key": "任意可用的 sk- 密钥；通过 OpenAI 兼容计费接口查询额度。",
   sub2api: "Sub2API 登录后的访问令牌（JWT）；过期需手动更换，推荐用账号密码模式。",
-  "sub2api-password": "填 Sub2API 的登录邮箱和密码，面板会自动登录并在令牌过期时自动续期。开启 2FA 的账号不支持。",
+  "sub2api-password": "填 Sub2API 的登录邮箱和密码，面板会自动登录并在令牌过期时自动续期；站点使用 Cap 验证码时也会自动完成验证。",
   fixed: "包月 / 包年等定期投入的上游：不访问任何接口，只按天摊销计入利润成本。",
 };
 
