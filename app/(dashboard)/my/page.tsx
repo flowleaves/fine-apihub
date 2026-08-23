@@ -36,12 +36,25 @@ const OWN_RANGES = [
   { value: "30d", label: "近 30 天" },
 ];
 
+// 日志精算的扫描条数档位（new-api 每页上限 100 条，条数越大请求越多越慢）
+const AUDIT_ROWS = [
+  { value: 2000, label: "2 千条" },
+  { value: 4000, label: "4 千条" },
+  { value: 10000, label: "1 万条" },
+  { value: 20000, label: "2 万条" },
+];
+
 // 成本口径标签（同 v1 MODE_LABEL）
 const MODE_LABEL: Record<string, string> = { usage: "按用量", fixed: "固定摊销", history: "余额推算 ≈" };
 // 角色标签（同 v1 renderResoldManager 的 ROLE）
 const ROLE_LABEL: Record<number, string> = { 10: "管理员", 100: "root" };
 
 const num = (n: any) => Number(n ?? 0).toLocaleString("en-US");
+// 有效单价：¥ / 百万「计费 token」。看板的 token 只有 prompt+completion，不含缓存读写，
+// 倍率也不体现，所以这一列高得离谱的行通常是缓存写入 / 长上下文 / 高倍率在计价
+const perM = (costCny: number, tokens: number) =>
+  tokens > 0 ? `¥${(costCny / (tokens / 1e6)).toFixed(3)}` : "—";
+const TOKEN_NOTE = "看板口径：prompt + completion，不含缓存读写（缓存与倍率见「日志精算」）";
 const hourLabel = (t: any) => `${String(new Date(Number(t)).getHours()).padStart(2, "0")}:00`;
 const fmtDay = (v: any) => {
   const dd = new Date(v);
@@ -79,6 +92,20 @@ function SectionHead({ title, sub, extra }: { title: string; sub?: React.ReactNo
       {sub ? <Text type="secondary" style={{ fontSize: 12, minWidth: 0 }}>{sub}</Text> : null}
       {extra ? <span style={{ marginLeft: "auto" }}>{extra}</span> : null}
     </div>
+  );
+}
+
+// 环比：与上一等长窗口对比。上窗为 0 记「新增」；涨跌 50% 以上标黄，方便一眼扫到跳变
+function Delta({ pct, isNew }: { pct: number | null | undefined; isNew?: boolean }) {
+  const { token } = theme.useToken();
+  if (isNew) return <Tag color="orange">新增</Tag>;
+  if (pct == null) return <Text type="secondary">—</Text>;
+  const big = Math.abs(pct) >= 50;
+  return (
+    <Text style={{ color: big ? token.colorWarningText : undefined, fontWeight: big ? 600 : undefined }}>
+      {pct >= 0 ? "↑" : "↓"}
+      {Math.abs(pct)}%
+    </Text>
   );
 }
 
@@ -152,6 +179,12 @@ export default function MyStationPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
 
+  // 日志精算状态（开销大，只在用户点按钮时才翻日志）
+  const [audit, setAudit] = useState<any>(null);
+  const [auditing, setAuditing] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditRows, setAuditRows] = useState(4000);
+
   // 转售 Key 管理器状态
   const [mgrOpen, setMgrOpen] = useState(false);
   const [mgrLoading, setMgrLoading] = useState(false);
@@ -211,6 +244,29 @@ export default function MyStationPage() {
       setRefreshing(false);
     }
   };
+
+  const runAudit = async () => {
+    setAuditing(true);
+    setAuditError(null);
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const r = await api(
+        `/api/own/audit?range=${rangeRef.current}&tz=${encodeURIComponent(tz)}&maxRows=${auditRows}`
+      );
+      setAudit(r);
+    } catch (e: any) {
+      setAuditError(e.message || String(e));
+      setAudit(null);
+    } finally {
+      setAuditing(false);
+    }
+  };
+
+  // 范围一换，上一次的精算结果就不是这个窗口的了
+  useEffect(() => {
+    setAudit(null);
+    setAuditError(null);
+  }, [range]);
 
   // ---- 转售 Key 管理器（v1 #manageResold / renderResoldManager / #resoldSave）----
   const toggleManager = async () => {
@@ -384,6 +440,25 @@ export default function MyStationPage() {
   const totalBalCny = balances ? balances.reduce((a, u) => a + u.balanceUsd, 0) * rate : 0;
 
   const pctCol = (cost: number) => (totCost > 0 ? ((cost / totCost) * 100).toFixed(1) + "%" : "—");
+  // 消费占比远高于 token 占比的行：钱花在缓存写入 / 长上下文 / 高倍率上，
+  // 看它的 token 栏会得出完全错误的结论，所以显式标出来
+  const cacheHeavy = (r: any) => {
+    if (!(totCost > 0) || !(totTokens > 0)) return false;
+    const cs = (r.cost || 0) / totCost;
+    const ts = (r.tokens || 0) / totTokens;
+    return cs > 0.02 && (ts === 0 || cs / ts >= 3);
+  };
+  const heavyTag = (r: any) =>
+    cacheHeavy(r) ? (
+      <Tag color="gold" style={{ marginLeft: 6 }} title="消费占比远高于 token 占比：缓存写入 / 长上下文 / 高倍率计价">
+        倍率/缓存计价
+      </Tag>
+    ) : null;
+  const prevLabel = d.prevWindow
+    ? `上一等长窗口（${new Date(d.prevWindow.startMs).toLocaleString("zh-CN", { hour12: false })} 起 ${d.prevWindow.spanDays} 天窗）`
+    : "上一等长窗口";
+  const flow = d.flow;
+  const flowRows = (list: any[]) => (list || []).map((r: any) => ({ ...r, cost: r.cost * rate, prevCost: r.prevCost * rate }));
 
   // byModel 按消费(cost)降序（v1 口径，模型明细表沿用）；本图纵轴是 tokens，
   // 必须按 tokens 重排——否则巨量 token 的便宜模型排在中间、长尾全是隐形细条，
@@ -399,8 +474,12 @@ export default function MyStationPage() {
           <KpiCard><Statistic title="期内消费" value={cny4(totCost)} /></KpiCard>
         </Col>
         <Col xs={12} md={6}>
-          <KpiCard>
-            <Statistic title="Tokens" value={fmtTokens(totTokens)} valueRender={(node) => <span title={num(totTokens)}>{node}</span>} />
+          <KpiCard sub={<Text type="secondary" style={{ fontSize: 12 }}>不含缓存读写</Text>}>
+            <Statistic
+              title="计费 Token"
+              value={fmtTokens(totTokens)}
+              valueRender={(node) => <span title={`${num(totTokens)} · ${TOKEN_NOTE}`}>{node}</span>}
+            />
           </KpiCard>
         </Col>
         <Col xs={12} md={6}>
@@ -816,9 +895,20 @@ export default function MyStationPage() {
               ),
             },
             { title: "请求数", dataIndex: "requests", render: (v: number) => num(v) },
-            { title: "Tokens", dataIndex: "tokens", render: (v: number) => num(v) },
+            { title: <span title={TOKEN_NOTE}>计费 Token</span>, dataIndex: "tokens", render: (v: number) => num(v) },
             { title: "消费", dataIndex: "cost", render: (v: number) => cny4(v) },
             { title: "占比", dataIndex: "cost", key: "pct", render: (v: number) => pctCol(v) },
+            {
+              title: <span title="¥ / 百万计费 token">¥/M</span>,
+              key: "perM",
+              render: (_: any, r: any) => perM(r.cost, r.tokens),
+            },
+            {
+              title: <span title={prevLabel}>环比</span>,
+              key: "delta",
+              render: (_: any, r: any) =>
+                d.prevUserAvailable === false ? <Text type="secondary">—</Text> : <Delta pct={r.deltaPct} isNew={r.isNew} />,
+            },
           ]}
         />
       </ProCard>
@@ -862,13 +952,230 @@ export default function MyStationPage() {
           dataSource={models}
           locale={{ emptyText: "该范围内暂无数据" }}
           columns={[
-            { title: "模型", dataIndex: "model", render: (v: string) => <Text code>{v}</Text> },
+            {
+              title: "模型",
+              dataIndex: "model",
+              render: (v: string, r: any) => (
+                <>
+                  <Text code>{v}</Text>
+                  {heavyTag(r)}
+                </>
+              ),
+            },
             { title: "请求数", dataIndex: "requests", render: (v: number) => num(v) },
-            { title: "Tokens", dataIndex: "tokens", render: (v: number) => num(v) },
+            { title: <span title={TOKEN_NOTE}>计费 Token</span>, dataIndex: "tokens", render: (v: number) => num(v) },
             { title: "消费", dataIndex: "cost", render: (v: number) => cny4(v) },
             { title: "占比", dataIndex: "cost", key: "pct", render: (v: number) => pctCol(v) },
+            {
+              title: <span title="¥ / 百万计费 token">¥/M</span>,
+              key: "perM",
+              render: (_: any, r: any) => perM(r.cost, r.tokens),
+            },
+            {
+              title: <span title={prevLabel}>环比</span>,
+              key: "delta",
+              render: (_: any, r: any) => <Delta pct={r.deltaPct} isNew={r.isNew} />,
+            },
           ]}
         />
+      </ProCard>
+
+      {/* ---- 分组 / 渠道口径（/api/data/flow）：模型行看不出分组倍率与上游切换 ---- */}
+      <SectionHead
+        title="分组与渠道"
+        sub={`按分组、上游渠道拆分消费，并与${prevLabel}对比${
+          flow && !flow.error && flow.coveragePct != null ? ` · 覆盖模型口径消费的 ${flow.coveragePct}%` : ""
+        }`}
+      />
+      {flow?.error ? (
+        <Alert type="warning" showIcon message={`分组/渠道口径不可用：${flow.error}`} style={{ marginBottom: 12 }} />
+      ) : null}
+      {flow && !flow.error && flow.coveragePct != null && flow.coveragePct < 95 ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`分组口径只覆盖 ${flow.coveragePct}% 的消费：new-api 的流向查询会跳过没有分组字段的历史记录`}
+        />
+      ) : null}
+      {flow && !flow.error ? (
+        <>
+          <Row gutter={[12, 12]}>
+            {[
+              { key: "group", title: "分组", rows: flowRows(flow.byGroup), field: "group" },
+              { key: "channel", title: "上游渠道", rows: flowRows(flow.byChannel), field: "channel" },
+            ].map((t) => (
+              <Col key={t.key} xs={24} lg={12}>
+                <ProCard style={{ height: "100%" }} title={<ChartHead title={t.title} sub={`共 ${t.rows.length} 项 · 按消费降序`} />}>
+                  <Table
+                    size="small"
+                    rowKey={t.field}
+                    pagination={false}
+                    scroll={{ x: "max-content" }}
+                    dataSource={t.rows}
+                    locale={{ emptyText: "该范围内暂无数据" }}
+                    columns={[
+                      { title: t.title, dataIndex: t.field, render: (v: string) => <Text code>{v || "—"}</Text> },
+                      { title: "消费", dataIndex: "cost", render: (v: number) => cny4(v) },
+                      { title: "上窗", dataIndex: "prevCost", render: (v: number) => cny4(v) },
+                      {
+                        title: <span title={prevLabel}>环比</span>,
+                        key: "delta",
+                        render: (_: any, r: any) => <Delta pct={r.deltaPct} isNew={r.isNew} />,
+                      },
+                      { title: <span title={TOKEN_NOTE}>计费 Token</span>, dataIndex: "tokens", render: (v: number) => fmtTokens(v) },
+                      { title: <span title="¥ / 百万计费 token">¥/M</span>, key: "perM", render: (_: any, r: any) => perM(r.cost, r.tokens) },
+                    ]}
+                  />
+                </ProCard>
+              </Col>
+            ))}
+          </Row>
+          {flow.byUserGroup?.length ? (
+            <ProCard style={{ marginTop: 12 }} title={<ChartHead title="用户 × 分组" sub="按消费降序，最多 15 项（定位「谁在哪个分组涨了」）" />}>
+              <Table
+                size="small"
+                rowKey="key"
+                pagination={false}
+                scroll={{ x: "max-content" }}
+                dataSource={flowRows(flow.byUserGroup)}
+                locale={{ emptyText: "该范围内暂无数据" }}
+                columns={[
+                  { title: "用户 · 分组", dataIndex: "key", render: (v: string) => <Text code>{v}</Text> },
+                  { title: "请求数", dataIndex: "requests", render: (v: number) => num(v) },
+                  { title: "消费", dataIndex: "cost", render: (v: number) => cny4(v) },
+                  { title: "上窗", dataIndex: "prevCost", render: (v: number) => cny4(v) },
+                  {
+                    title: <span title={prevLabel}>环比</span>,
+                    key: "delta",
+                    render: (_: any, r: any) => <Delta pct={r.deltaPct} isNew={r.isNew} />,
+                  },
+                  { title: <span title="¥ / 百万计费 token">¥/M</span>, key: "perM", render: (_: any, r: any) => perM(r.cost, r.tokens) },
+                ]}
+              />
+            </ProCard>
+          ) : null}
+        </>
+      ) : null}
+
+      {/* ---- 日志精算：把看板漏计的缓存读写与长上下文算出来 ---- */}
+      <SectionHead
+        title="日志精算"
+        sub="翻消费日志明细，补上看板漏计的缓存读 / 缓存写与长上下文请求"
+        extra={
+          <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <Segmented
+              size="small"
+              options={AUDIT_ROWS}
+              value={auditRows}
+              onChange={(v) => setAuditRows(Number(v))}
+            />
+            <Button size="small" type="primary" loading={auditing} onClick={runAudit}>
+              {audit ? "重新精算" : "开始精算"}
+            </Button>
+          </span>
+        }
+      />
+      <ProCard>
+        {auditError ? <Alert type="error" showIcon message={`精算失败：${auditError}`} style={{ marginBottom: 12 }} /> : null}
+        {!audit ? (
+          <Text type="secondary">
+            看板的 token 只有 prompt + completion；Claude 这类缓存占九成的模型会显示成「token 近零、消费很大」。
+            点「开始精算」按当前范围翻最近 {num(auditRows)} 条消费日志，算出真实 token、缓存读写与长上下文占比。
+          </Text>
+        ) : (
+          <>
+            <Row gutter={[12, 12]}>
+              <Col xs={12} md={6}>
+                <KpiCard sub={<Text type="secondary" style={{ fontSize: 12 }}>看板口径</Text>}>
+                  <Statistic title="计费 Token" value={fmtTokens(audit.totals?.billedTokens || 0)} />
+                </KpiCard>
+              </Col>
+              <Col xs={12} md={6}>
+                <KpiCard sub={<Text type="secondary" style={{ fontSize: 12 }}>含缓存读写</Text>}>
+                  <Statistic title="真实 Token" value={fmtTokens(audit.totals?.trueTokens || 0)} />
+                </KpiCard>
+              </Col>
+              <Col xs={12} md={6}>
+                <KpiCard sub={<Text type="secondary" style={{ fontSize: 12 }}>缓存写 {fmtTokens(audit.totals?.cacheWriteTokens || 0)}</Text>}>
+                  <Statistic title="缓存读 Token" value={fmtTokens(audit.totals?.cacheReadTokens || 0)} />
+                </KpiCard>
+              </Col>
+              <Col xs={12} md={6}>
+                <KpiCard sub={<Text type="secondary" style={{ fontSize: 12 }}>{cny(audit.totals?.longCost * rate || 0)}</Text>}>
+                  <Statistic
+                    title={`长上下文（≥${fmtTokens(audit.longContextTokens)}）`}
+                    value={num(audit.totals?.longRequests || 0)}
+                    suffix="次"
+                  />
+                </KpiCard>
+              </Col>
+            </Row>
+            <Text type="secondary" style={{ display: "block", margin: "10px 0" }}>
+              已扫描 {num(audit.scanned)}
+              {audit.total != null ? ` / ${num(audit.total)}` : ""} 条日志
+              {audit.fromMs
+                ? ` · 覆盖 ${new Date(audit.fromMs).toLocaleString("zh-CN", { hour12: false })} ~ ${new Date(
+                    audit.toMs
+                  ).toLocaleString("zh-CN", { hour12: false })}`
+                : ""}
+              {audit.truncated ? " · 已按条数上限截断，只统计最近的这部分" : ""}
+            </Text>
+            <Table
+              size="small"
+              rowKey="model"
+              pagination={false}
+              scroll={{ x: "max-content" }}
+              dataSource={audit.byModel || []}
+              locale={{ emptyText: "该范围内暂无日志" }}
+              columns={[
+                {
+                  title: "模型",
+                  dataIndex: "model",
+                  render: (v: string, r: any) => (
+                    <>
+                      <Text code>{v}</Text>
+                      {r.anthropicPct >= 50 ? (
+                        <Tag color="gold" style={{ marginLeft: 6 }} title="Claude 语义：缓存读写在 prompt_tokens 之外额外计费">
+                          缓存额外计费
+                        </Tag>
+                      ) : null}
+                    </>
+                  ),
+                },
+                { title: "请求数", dataIndex: "requests", render: (v: number) => num(v) },
+                { title: <span title={TOKEN_NOTE}>计费 Token</span>, dataIndex: "billedTokens", render: (v: number) => fmtTokens(v) },
+                { title: "真实 Token", dataIndex: "trueTokens", render: (v: number) => fmtTokens(v) },
+                { title: "缓存读", dataIndex: "cacheReadTokens", render: (v: number) => fmtTokens(v) },
+                { title: "缓存写", dataIndex: "cacheWriteTokens", render: (v: number) => fmtTokens(v) },
+                {
+                  title: `长上下文（≥${fmtTokens(audit.longContextTokens)}）`,
+                  key: "long",
+                  render: (_: any, r: any) =>
+                    r.longRequests ? `${num(r.longRequests)} 次 · ${cny(r.longCost * rate)}` : <Text type="secondary">—</Text>,
+                },
+                { title: "消费", dataIndex: "cost", render: (v: number) => cny4(v * rate) },
+                {
+                  title: <span title="¥ / 百万真实 token（含缓存）">¥/M 真实</span>,
+                  key: "perMTrue",
+                  render: (_: any, r: any) => perM(r.cost * rate, r.trueTokens),
+                },
+                {
+                  title: "计价倍率",
+                  key: "ratio",
+                  render: (_: any, r: any) => (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {r.avgModelRatio != null ? `模型×${r.avgModelRatio}` : "—"}
+                      {r.avgGroupRatio != null ? ` 分组×${r.avgGroupRatio}` : ""}
+                      {r.avgCompletionRatio != null ? ` 输出×${r.avgCompletionRatio}` : ""}
+                      {r.tiers?.length ? ` · ${r.tiers.map((t: any) => `${t.name}×${t.requests}`).join(" ")}` : ""}
+                    </Text>
+                  ),
+                },
+              ]}
+            />
+          </>
+        )}
       </ProCard>
     </PageContainer>
   );

@@ -2,7 +2,8 @@ node_modules/
 .DS_Store
 
 # 运行时数据（含中转站凭证、面板密码哈希、会话密钥、余额历史）——绝不入库
-data/
+# 必须锚定根目录：不加斜杠会连 app/mock/**/api/data/ 这类源码目录一起吞掉
+/data/
 
 # 本地工具配置
 .claude/

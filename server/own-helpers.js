@@ -2,7 +2,7 @@
 // 供 /api/own/analytics、/api/own/admin-keys 与每日日报共用。
 // 约定：不在顶层 import lib/runtime.js；跨请求状态（缓存）一律挂在 rt 字段上。
 import {
-  queryStationUsage, queryOwnUsers, queryOwnChannels, queryLogStat,
+  queryStationUsage, queryOwnUsers, queryOwnChannels, queryLogStat, queryOwnFlow,
   parseDateLabel, fixedPurchases,
 } from "../lib/providers.js";
 
@@ -232,6 +232,94 @@ export async function computeProfit(rt, own, incomeUsd, adminUsageUsd, { startMs
       excludedStationIds: excludedUpstreams.map((s) => s.id),
       warnings,
       windowDays: Math.round(windowDays * 10) / 10,
+    };
+  } catch (err) {
+    return { error: err?.message || String(err) };
+  }
+}
+
+// ---- 展示窗口解析（analytics 与 audit 共用）--------------------------------
+/**
+ * 解析 range/tz 查询参数 → 按站点时区自然日切出的展示窗口与上一等长窗口。
+ * 上窗整窗左移 spanDays 天：今天 → 昨天同一时刻为止；7/30 天 → 前一个 7/30 天。
+ */
+export function resolveOwnWindow(sp) {
+  const range = ["today", "7d", "30d"].includes(sp.get("range")) ? sp.get("range") : "7d";
+  let tz = String(sp.get("tz") || "");
+  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); } catch { tz = ""; }
+  if (!tz) tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const now = Date.now();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(now));
+  const get = (k) => Number(parts.find((x) => x.type === k).value);
+  const midnight = now - ((get("hour") % 24) * 3600 + get("minute") * 60 + get("second")) * 1000 - (now % 1000);
+  const days = range === "30d" ? 29 : range === "7d" ? 6 : 0;
+  const startMs = midnight - days * 86400000;
+  const spanDays = days + 1;
+  const prevStart = startMs - spanDays * 86400000;
+  return { range, tz, now, midnight, days, startMs, spanDays, prevStart, prevEnd: prevStart + (now - startMs) };
+}
+
+// ---- 分组 / 渠道口径（/api/data/flow）与环比 --------------------------------
+// 看板只有模型维度，消费突变（分组倍率、换上游渠道）在模型行里看不出来；
+// 流向数据补上这两个维度，并与上一等长窗口对比出跳变。
+
+export function aggregateFlow(rows, keyOf, field) {
+  const m = new Map();
+  for (const r of rows) {
+    const key = keyOf(r);
+    if (!key) continue;
+    const acc = m.get(key) || { [field]: key, tokens: 0, cost: 0, requests: 0 };
+    acc.tokens += r.tokens; acc.cost += r.cost; acc.requests += r.requests;
+    m.set(key, acc);
+  }
+  return [...m.values()].sort((a, b) => b.cost - a.cost);
+}
+
+/**
+ * 与上一等长窗口对齐：给每行补 prevCost / prevTokens / deltaPct。
+ * 上窗为 0 的行算不出百分比（记 null），用 isNew 标注「本窗新出现」。
+ */
+export function joinPrev(cur, prev, field) {
+  const r4 = (v) => Math.round(v * 10000) / 10000;
+  const pm = new Map(prev.map((r) => [r[field], r]));
+  return cur.map((r) => {
+    const p = pm.get(r[field]);
+    const prevCost = p ? r4(p.cost) : 0;
+    return {
+      ...r,
+      cost: r4(r.cost),
+      prevCost,
+      prevTokens: p ? p.tokens : 0,
+      deltaPct: prevCost > 0 ? Math.round(((r.cost - prevCost) / prevCost) * 1000) / 10 : null,
+      isNew: !p && r.cost > 0,
+    };
+  });
+}
+
+/**
+ * 拉两个窗口的流向数据，产出分组 / 渠道 / (用户×分组) 三张带环比的表。
+ * totalCostUsd 传窗内模型口径合计，用来算覆盖率：new-api 的 flow 查询带
+ * use_group <> '' 过滤，没有分组字段的历史行不在内，合计会偏小。
+ */
+export async function computeFlowBreakdown(own, { startMs, endMs, prevStartMs, prevEndMs, totalCostUsd }) {
+  try {
+    const [cur, prev] = await Promise.all([
+      queryOwnFlow(own, startMs, endMs),
+      queryOwnFlow(own, prevStartMs, prevEndMs).catch(() => []),
+    ]);
+    const chKey = (r) => r.channelName || (r.channelId ? `渠道 ${r.channelId}` : "");
+    const ugKey = (r) => (r.user && r.group ? `${r.user} · ${r.group}` : "");
+    const coveredUsd = cur.reduce((a, r) => a + r.cost, 0);
+    return {
+      byGroup: joinPrev(aggregateFlow(cur, (r) => r.group, "group"), aggregateFlow(prev, (r) => r.group, "group"), "group"),
+      byChannel: joinPrev(aggregateFlow(cur, chKey, "channel"), aggregateFlow(prev, chKey, "channel"), "channel"),
+      byUserGroup: joinPrev(aggregateFlow(cur, ugKey, "key"), aggregateFlow(prev, ugKey, "key"), "key").slice(0, 15),
+      coveredUsd: Math.round(coveredUsd * 10000) / 10000,
+      coveragePct: totalCostUsd > 0 ? Math.round((coveredUsd / totalCostUsd) * 1000) / 10 : null,
+      prevWindow: { startMs: prevStartMs, endMs: prevEndMs },
     };
   } catch (err) {
     return { error: err?.message || String(err) };

@@ -194,6 +194,115 @@ export function mockNewApiDataUsers(request) {
   return mockOwnData(request, "user");
 }
 
+// 流向数据（与真实 new-api 的 /api/data/flow 契约一致）：窗内按
+// (用户, 分组, 模型, 渠道) 聚合，无时间维度。演示数据刻意让 claude 分组单价高、
+// 便宜渠道与贵渠道并存，好在面板上看出「分组倍率」「换渠道」两类涨幅。
+const MOCK_FLOW = [
+  { username: "alice", use_group: "default", model_name: "claude-sonnet-4-5", channel_id: 1, channel_name: "上游A-高速", w: 5 },
+  { username: "alice", use_group: "vip", model_name: "claude-sonnet-4-5", channel_id: 2, channel_name: "上游A-备用", w: 2.2 },
+  { username: "bob", use_group: "default", model_name: "gpt-4o", channel_id: 1, channel_name: "上游A-高速", w: 3 },
+  { username: "bob", use_group: "vip", model_name: "gpt-4o", channel_id: 3, channel_name: "拼车团队", w: 1.4 },
+  { username: "carol", use_group: "default", model_name: "deepseek-v3", channel_id: 4, channel_name: "官方直连-DeepSeek", w: 1.5 },
+  { username: "dave", use_group: "internal", model_name: "gemini-2.5-pro", channel_id: 5, channel_name: "包月自建", w: 0.8 },
+];
+
+export function mockNewApiDataFlow(request) {
+  if (!hasAuth(request)) return unauthorized();
+  const q = new URL(request.url).searchParams;
+  const startSec = Number(q.get("start_timestamp")) || 0;
+  const endSec = Number(q.get("end_timestamp")) || 0;
+  if (!startSec || !endSec || endSec < startSec) {
+    return { status: 200, body: { success: false, message: "invalid start_timestamp" } };
+  }
+  // 与 /api/data/ 同源：把每个模型的窗内合计按权重拆到各 (用户,分组,渠道) 上，
+  // 这样面板算出的「分组口径覆盖率」正好是 100%，跟真实站点一致
+  const totals = new Map();
+  for (const row of mockOwnRows(startSec, endSec, "model")) {
+    const t = totals.get(row.model_name) || { quota: 0, token_used: 0, count: 0 };
+    t.quota += row.quota; t.token_used += row.token_used; t.count += row.count;
+    totals.set(row.model_name, t);
+  }
+  const weightSum = new Map();
+  for (const f of MOCK_FLOW) weightSum.set(f.model_name, (weightSum.get(f.model_name) || 0) + f.w);
+  const data = MOCK_FLOW.map((f) => {
+    const t = totals.get(f.model_name) || { quota: 0, token_used: 0, count: 0 };
+    const share = f.w / (weightSum.get(f.model_name) || 1);
+    return {
+      username: f.username, use_group: f.use_group, model_name: f.model_name,
+      channel_id: f.channel_id, channel_name: f.channel_name,
+      count: Math.max(1, Math.round(t.count * share)),
+      quota: Math.round(t.quota * share),
+      token_used: Math.round(t.token_used * share),
+    };
+  }).sort((a, b) => b.quota - a.quota);
+  return { status: 200, body: { success: true, message: "", data } };
+}
+
+// 消费日志明细（与真实 new-api 的 /api/log/ 契约一致，data.items + total 分页）。
+// claude 行走 anthropic 语义：prompt_tokens 只是未命中缓存的输入，缓存读写在 other 里，
+// 正是「看板 token 栏近零、额度栏很大」的成因；grok 行带长上下文与 matched_tier。
+const MOCK_LOG_SHAPES = [
+  { model: "claude-sonnet-4-5", user: "alice", group: "default", channel: 1, channelName: "上游A-高速", claude: true, prompt: 900, completion: 1200, cacheRead: 180000, cacheWrite: 9000, modelRatio: 5, completionRatio: 5 },
+  { model: "grok-4.6", user: "bob", group: "vip", channel: 3, channelName: "拼车团队", claude: false, prompt: 260000, completion: 1800, cacheRead: 0, cacheWrite: 0, modelRatio: 2, completionRatio: 3, tier: ">200k" },
+  { model: "gpt-4o", user: "bob", group: "default", channel: 1, channelName: "上游A-高速", claude: false, prompt: 12000, completion: 900, cacheRead: 4000, cacheWrite: 0, modelRatio: 2.5, completionRatio: 4 },
+  { model: "deepseek-v3", user: "carol", group: "default", channel: 4, channelName: "官方直连-DeepSeek", claude: false, prompt: 5000, completion: 700, cacheRead: 0, cacheWrite: 0, modelRatio: 0.14, completionRatio: 2 },
+];
+
+function mockLogRows(startSec, endSec) {
+  const span = Math.max(3600, endSec - startSec);
+  const step = Math.max(300, Math.ceil(span / 1200)); // 最多约 1200 个时间点
+  const rows = [];
+  for (let t = endSec - (endSec % step); t >= startSec; t -= step) {
+    for (let i = 0; i < MOCK_LOG_SHAPES.length; i++) {
+      const s = MOCK_LOG_SHAPES[i];
+      const noise = ((t * 2654435761 + i * 40503) >>> 16) % 1000 / 1000;
+      const scale = 0.5 + noise;
+      const prompt = Math.round(s.prompt * scale);
+      const completion = Math.round(s.completion * scale);
+      const cacheRead = Math.round(s.cacheRead * scale);
+      const cacheWrite = Math.round(s.cacheWrite * scale);
+      // 计费口径同 new-api：缓存读 ×0.1、缓存写 ×1.25、输出 ×completionRatio，再乘模型倍率
+      const billable = prompt + cacheRead * 0.1 + cacheWrite * 1.25 + completion * s.completionRatio;
+      const other = {
+        model_ratio: s.modelRatio, group_ratio: 1, completion_ratio: s.completionRatio,
+        cache_tokens: cacheRead, cache_ratio: 0.1,
+        ...(cacheWrite ? { cache_write_tokens: cacheWrite, cache_creation_tokens: cacheWrite, cache_creation_ratio: 1.25 } : {}),
+        ...(s.claude ? { usage_semantic: "anthropic", claude: true } : {}),
+        ...(s.tier ? { billing_mode: "tiered_expr", matched_tier: s.tier } : {}),
+      };
+      rows.push({
+        id: rows.length + 1, created_at: t, type: 2,
+        username: s.user, token_name: `${s.user}-key`, model_name: s.model,
+        prompt_tokens: prompt, completion_tokens: completion,
+        quota: Math.round(billable * s.modelRatio),
+        channel: s.channel, channel_name: s.channelName, group: s.group,
+        other: JSON.stringify(other),
+      });
+    }
+    if (rows.length > 6000) break;
+  }
+  return rows;
+}
+
+export function mockNewApiLogs(request) {
+  if (!hasAuth(request)) return unauthorized();
+  const q = new URL(request.url).searchParams;
+  const startSec = Number(q.get("start_timestamp")) || 0;
+  const endSec = Number(q.get("end_timestamp")) || 0;
+  let rows = mockLogRows(startSec, endSec);
+  for (const [param, field] of [["model_name", "model_name"], ["username", "username"], ["group", "group"]]) {
+    const v = q.get(param);
+    if (v) rows = rows.filter((r) => r[field] === v);
+  }
+  const page = Math.max(1, Number(q.get("p")) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(q.get("page_size")) || 10));
+  const items = rows.slice((page - 1) * pageSize, page * pageSize);
+  return {
+    status: 200,
+    body: { success: true, message: "", data: { page, page_size: pageSize, total: rows.length, items } },
+  };
+}
+
 export function mockNewApiUserList(request) {
   if (!hasAuth(request)) return unauthorized();
   return {

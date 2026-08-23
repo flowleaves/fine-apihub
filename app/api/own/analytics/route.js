@@ -2,7 +2,9 @@
 import { withAuth, json } from "../../../../lib/api.js";
 import { queryOwnData, dateStrInTz, parseDateLabel } from "../../../../lib/providers.js";
 import { forecastDaily, forecastHourly } from "../../../../lib/forecast.js";
-import { ownCache, getOwnUsers, computeResold, computeProfit } from "../../../../server/own-helpers.js";
+import {
+  ownCache, getOwnUsers, computeResold, computeProfit, computeFlowBreakdown, joinPrev, resolveOwnWindow,
+} from "../../../../server/own-helpers.js";
 
 export const GET = withAuth(async (request, rt) => {
   const { store } = rt;
@@ -13,31 +15,24 @@ export const GET = withAuth(async (request, rt) => {
     }, 400);
   }
   const sp = new URL(request.url).searchParams;
-  const range = ["today", "7d", "30d"].includes(sp.get("range")) ? sp.get("range") : "7d";
-  let tz = String(sp.get("tz") || "");
-  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); } catch { tz = ""; }
-  if (!tz) tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // 展示窗口 + 上一等长窗口（环比用来抓「昨天 $11、今天 $152」这类跳变）
+  const { range, tz, now, midnight, startMs, spanDays, prevStart, prevEnd } = resolveOwnWindow(sp);
+  const wideStart = midnight - 34 * 86400000; // 预测需要更长的历史
 
   const cache = ownCache(rt);
   const cacheKey = `${range}|${tz}`;
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.at < 120000) return json(hit.payload);
 
-  const now = Date.now();
-  const p = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(new Date(now));
-  const get = (k) => Number(p.find((x) => x.type === k).value);
-  const midnight = now - ((get("hour") % 24) * 3600 + get("minute") * 60 + get("second")) * 1000 - (now % 1000);
-  const days = range === "30d" ? 29 : range === "7d" ? 6 : 0;
-  const startMs = midnight - days * 86400000;
-  const wideStart = midnight - 34 * 86400000; // 预测需要更长的历史
-
   try {
-    // 模型行一次拉 35 天（窗口展示 + 日消费预测共用）；用户行只拉展示窗口
-    const [modelRows, userRows] = await Promise.all([
+    // 模型行一次拉 35 天（窗口展示 + 日消费预测共用）；用户行只拉展示窗口。
+    // 上窗用户行单独拉一次；上窗模型行落在 35 天内时直接从 modelRows 切，不多发请求。
+    const prevCovered = prevStart >= wideStart;
+    const [modelRows, userRows, prevUserRows, prevModelFetched] = await Promise.all([
       queryOwnData(own, wideStart, now, "model"),
       queryOwnData(own, startMs, now, "user"),
+      queryOwnData(own, prevStart, prevEnd, "user").catch(() => null),
+      prevCovered ? null : queryOwnData(own, prevStart, prevEnd, "model").catch(() => null),
     ]);
 
     const winModel = modelRows.filter((r) => r.t >= startMs);
@@ -123,11 +118,30 @@ export const GET = withAuth(async (request, rt) => {
     const incomeUsd = resold.incomeUsd;
     const adminUsageUsd = resold.adminUsageUsd;
 
+    // 上窗模型行：落在 35 天缓存里就地切，否则用单独拉的那份
+    const prevModelRows = prevCovered
+      ? modelRows.filter((r) => r.t >= prevStart && r.t < prevEnd)
+      : (prevModelFetched || []);
+    const [profit, flow] = await Promise.all([
+      computeProfit(rt, own, incomeUsd, adminUsageUsd, { startMs, now, tz, range, resold }),
+      // 分组 / 渠道口径：模型行里看不出「哪个分组涨了」「换到了哪个上游渠道」
+      computeFlowBreakdown(own, {
+        startMs, endMs: now, prevStartMs: prevStart, prevEndMs: prevEnd,
+        totalCostUsd: winModel.reduce((a, r) => a + r.cost, 0),
+      }),
+    ]);
+
     const payload = {
       range, tz, startMs, endMs: now,
+      prevWindow: { startMs: prevStart, endMs: prevEnd, spanDays },
       station: { id: own.id, name: own.name, cnyPerUsd: own.cnyPerUsd ?? null },
-      byModel: aggBy(winModel, "model"),
-      byUser,
+      // token 口径提示：new-api 的 quota_data.token_used 只写 prompt+completion，
+      // 缓存读写与倍率都不在里面（前端据此标注，精算见 /api/own/audit）
+      tokenScope: "billed",
+      byModel: joinPrev(aggBy(winModel, "model"), aggBy(prevModelRows, "model"), "model"),
+      byUser: joinPrev(byUser, aggBy(prevUserRows || [], "user"), "user"),
+      prevUserAvailable: prevUserRows != null,
+      flow,
       userBalances: ownUsers
         ? ownUsers
             .filter((u) => u.role < 10)
@@ -138,7 +152,7 @@ export const GET = withAuth(async (request, rt) => {
       daily: daily.slice(-14),
       forecast: forecastDaily(daily, 7),
       hourly: hourlyForecast,
-      profit: await computeProfit(rt, own, incomeUsd, adminUsageUsd, { startMs, now, tz, range, resold }),
+      profit,
       generatedAt: new Date().toISOString(),
     };
     cache.set(cacheKey, { at: Date.now(), payload });

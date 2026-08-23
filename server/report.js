@@ -147,7 +147,9 @@ export async function buildReport(rt) {
   }
   L.push("");
   L.push("■ 用量");
-  L.push(`请求 ${totalReqs.toLocaleString("en-US")} 次 ｜ Tokens ${rptTok(totalTokens)} ｜ 活跃用户 ${byUser.length} 个`);
+  // token 口径：new-api 的 token_used 只有 prompt+completion，缓存读写不在里面，
+  // 报告里明说，免得拿它跟消费对不上（真实 token 见面板的「日志精算」）
+  L.push(`请求 ${totalReqs.toLocaleString("en-US")} 次 ｜ 计费 Tokens ${rptTok(totalTokens)}（不含缓存读写）｜ 活跃用户 ${byUser.length} 个`);
   L.push("");
   L.push("■ Top 模型（按消费）");
   byModel.slice(0, 5).forEach((m, i) => L.push(`${i + 1}. ${m.key}  ${rptCny(m.cost * ownRate)}（${rptTok(m.tokens)} tokens · ${m.requests.toLocaleString("en-US")} 次）`));
@@ -301,7 +303,7 @@ function buildReportHtml(rt, d) {
       ${kpi("利润", profitOk ? money(d.profit.profitCny) : "—", profitOk && d.profit.marginPct != null ? `利润率 ${d.profit.marginPct}%` : "", profitOk && d.profit.profitCny >= 0 ? C.green : C.red)}
     </tr></table></td></tr>
     ${section("近 14 天消费趋势", trend)}
-    ${section(`用量：请求 ${d.totalReqs.toLocaleString("en-US")} 次 · Tokens ${rptTok(d.totalTokens)} · 活跃用户 ${d.activeUsers} 个`, "")}
+    ${section(`用量：请求 ${d.totalReqs.toLocaleString("en-US")} 次 · 计费 Tokens ${rptTok(d.totalTokens)}（不含缓存读写）· 活跃用户 ${d.activeUsers} 个`, "")}
     ${section("Top 模型（按消费）", modelBars)}
     ${section("Top 用户（按消费）", userBars)}
     ${profitWarnings ? section("利润口径", profitWarnings) : ""}

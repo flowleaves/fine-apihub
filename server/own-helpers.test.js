@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  mapCostChannels, matchCostStation, normalizeCostUrl, reconcileUsageCost, selectCostUpstreams,
+  aggregateFlow, joinPrev, mapCostChannels, matchCostStation, normalizeCostUrl,
+  reconcileUsageCost, resolveOwnWindow, selectCostUpstreams,
 } from "./own-helpers.js";
 
 test("成本渠道支持主地址、api 后缀和显式别名匹配", () => {
@@ -49,4 +50,40 @@ test("用量接口有有效成本时保持接口口径", () => {
     mode: "usage",
     note: null,
   });
+});
+
+test("流向数据按维度聚合并与上一等长窗口对比", () => {
+  const cur = [
+    { user: "a", group: "grok", model: "grok-4.6", channelId: 7, channelName: "sol", tokens: 100, cost: 152, requests: 596 },
+    { user: "b", group: "default", model: "gpt-4o", channelId: 1, channelName: "luna", tokens: 900, cost: 20, requests: 30 },
+  ];
+  const prev = [
+    { user: "a", group: "grok", model: "grok-4.6", channelId: 7, channelName: "sol", tokens: 90, cost: 11, requests: 49 },
+  ];
+  const byGroup = joinPrev(
+    aggregateFlow(cur, (r) => r.group, "group"),
+    aggregateFlow(prev, (r) => r.group, "group"),
+    "group"
+  );
+  assert.deepEqual(byGroup.map((r) => [r.group, r.cost, r.prevCost, r.deltaPct, r.isNew]), [
+    ["grok", 152, 11, 1281.8, false],
+    ["default", 20, 0, null, true],
+  ]);
+
+  // 空维度值（没有分组的行）不参与聚合，否则会多出一行「」
+  assert.equal(aggregateFlow([{ group: "", tokens: 1, cost: 1, requests: 1 }], (r) => r.group, "group").length, 0);
+});
+
+test("展示窗口的上一窗与当窗等长且左移整窗", () => {
+  const sp = new URLSearchParams({ range: "7d", tz: "Asia/Shanghai" });
+  const w = resolveOwnWindow(sp);
+  assert.equal(w.range, "7d");
+  assert.equal(w.spanDays, 7);
+  assert.equal(w.startMs - w.prevStart, 7 * 86400000);
+  assert.equal(w.now - w.startMs, w.prevEnd - w.prevStart);
+
+  const today = resolveOwnWindow(new URLSearchParams({ range: "today", tz: "Asia/Shanghai" }));
+  assert.equal(today.startMs - today.prevStart, 86400000); // 今天 → 昨天同一时刻为止
+  // 非法时区退回本机时区而不是抛错
+  assert.ok(resolveOwnWindow(new URLSearchParams({ range: "today", tz: "Nowhere/Nope" })).tz);
 });

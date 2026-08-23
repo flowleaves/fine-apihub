@@ -32,6 +32,9 @@ function truncateLabel(s: any, units = 14): string {
   return String(s);
 }
 
+// new-api 站点的 token 口径提示（sub2api 站点自带输入/输出明细，不受此限）
+const NEWAPI_TOKEN_NOTE = "new-api 口径：prompt + completion，不含缓存读写";
+
 const num = (n: any) => Number(n ?? 0).toLocaleString("en-US");
 
 // 全站统一：图表本体固定高度，保证同排两图等高
@@ -247,7 +250,12 @@ export default function UsagePage() {
     { title: "请求数", dataIndex: "requests", align: "right" as const, render: (v: any) => num(v) },
     { title: "输入 Tokens", dataIndex: "inputTokens", align: "right" as const, render: (v: any, r: any) => (r.hasIO ? num(v) : "—") },
     { title: "输出 Tokens", dataIndex: "outputTokens", align: "right" as const, render: (v: any, r: any) => (r.hasIO ? num(v) : "—") },
-    { title: "总 Tokens", dataIndex: "tokens", align: "right" as const, render: (v: any) => num(v) },
+    {
+      // new-api 的 token_used 只写 prompt + completion，缓存读写不在里面：
+      // 缓存重的模型会显示成 token 很少但消耗很大（精算见「我的站点 · 日志精算」）
+      title: <span title={NEWAPI_TOKEN_NOTE}>总 Tokens</span>,
+      dataIndex: "tokens", align: "right" as const, render: (v: any) => num(v),
+    },
     { title: "实际消耗", dataIndex: "cost", align: "right" as const, render: (v: any) => cny4(v) },
   ];
 
@@ -304,7 +312,7 @@ export default function UsagePage() {
             <ProCard colSpan={{ xs: 12, md: 6 }} variant="outlined" style={{ height: "100%" }}>
               <Statistic
                 title="总 Tokens"
-                valueRender={() => <span title={num(agg.totTokens)}>{fmtTokens(agg.totTokens)}</span>}
+                valueRender={() => <span title={`${num(agg.totTokens)} · ${NEWAPI_TOKEN_NOTE}`}>{fmtTokens(agg.totTokens)}</span>}
                 value={agg.totTokens}
               />
               <div style={{ minHeight: 20 }}>{null}</div>
