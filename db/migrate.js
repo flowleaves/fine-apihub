@@ -1,13 +1,13 @@
-// 建表 + v1 数据一次性迁移（stations.json / history.json / secret.key → MySQL）。
+// 建表 + v1 数据一次性迁移（stations.json / history.json / secret.key → SQLite）。
 // 幂等：仅当库里还没有数据时才导入，绝不覆盖已有数据。
 // 用法：npm run db:migrate（或应用启动时自动调用 importV1IfEmpty）
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getPool, ensureSchema } from "./pool.js";
+import { getPool, ensureSchema, resolveDbPath } from "./pool.js";
 
 export async function importV1IfEmpty(pool) {
   // 显式配置才导入：避免误把构建产物同目录下的任何 data/ 当迁移源，
-  // 也让 Next 构建追踪不会把真实凭证目录拷进 standalone 产物
+  // 也让 Next 构建追踪不会把真实凭证目录拷进构建产物
   const dir = process.env.V1_DATA_DIR;
   if (!dir) return { imported: false, reason: "未配置 V1_DATA_DIR，跳过 v1 导入" };
   const [[{ n: stationCount }]] = await pool.query("SELECT COUNT(*) AS n FROM stations");
@@ -27,43 +27,48 @@ export async function importV1IfEmpty(pool) {
     await conn.beginTransaction();
     // 站点文档原样入库
     const stations = Array.isArray(v1.stations) ? v1.stations : [];
-    if (stations.length) {
-      await conn.query("INSERT INTO stations (id, pos, doc) VALUES ?", [
-        stations.map((s, i) => [s.id, i, JSON.stringify(s)]),
+    for (let i = 0; i < stations.length; i++) {
+      const s = stations[i];
+      await conn.query("INSERT INTO stations (id, pos, doc) VALUES (?, ?, ?)", [
+        s.id, i, JSON.stringify(s),
       ]);
-      result.stations = stations.length;
     }
+    result.stations = stations.length;
+
+    // 会话密钥沿用 v1（已有登录态不失效）；先算出来，与其他 meta 一起写
+    let secretValue = null;
+    try {
+      const secret = (await readFile(join(dir, "secret.key"), "utf8")).trim();
+      if (secret) { secretValue = secret; result.secret = true; }
+    } catch {}
+
     const metas = [];
     if (v1.settings) metas.push(["settings", JSON.stringify(v1.settings)]);
     if (v1.auth) metas.push(["auth", JSON.stringify(v1.auth)]);
     if (v1.notifications) metas.push(["notifications", JSON.stringify(v1.notifications)]);
-    // 会话密钥沿用 v1（已有登录态不失效）
-    try {
-      const secret = (await readFile(join(dir, "secret.key"), "utf8")).trim();
-      if (secret) { metas.push(["session_secret", JSON.stringify(secret)]); result.secret = true; }
-    } catch {}
-    if (metas.length) {
-      await conn.query("INSERT INTO meta (k, v) VALUES ?", [metas]);
+    if (secretValue) metas.push(["session_secret", JSON.stringify(secretValue)]);
+    for (const [k, v] of metas) {
+      await conn.query("INSERT INTO meta (k, v) VALUES (?, ?)", [k, v]);
     }
-    // 历史快照
+
+    // 历史快照（SQLite 无 packet 上限，逐行插入即可；v1 数据量在万级以内）
     try {
       const hist = JSON.parse(await readFile(join(dir, "history.json"), "utf8"));
-      const rows = [];
+      let count = 0;
       for (const [stationId, pts] of Object.entries(hist || {})) {
         if (!Array.isArray(pts)) continue;
         for (const p of pts) {
-          if (Array.isArray(p) && p.length >= 2) rows.push([stationId, p[0], p[1], p[2] ?? 0]);
+          if (!Array.isArray(p) || p.length < 2) continue;
+          await conn.query(
+            "INSERT OR IGNORE INTO history_points (station_id, t, remaining, used) VALUES (?, ?, ?, ?)",
+            [stationId, p[0], p[1], p[2] ?? 0]
+          );
+          count++;
         }
       }
-      // 分批插入，避免超大 packet
-      for (let i = 0; i < rows.length; i += 5000) {
-        await conn.query(
-          "INSERT IGNORE INTO history_points (station_id, t, remaining, used) VALUES ?",
-          [rows.slice(i, i + 5000)]
-        );
-      }
-      result.points = rows.length;
+      result.points = count;
     } catch {}
+
     await conn.commit();
   } catch (err) {
     await conn.rollback().catch(() => {});
@@ -84,5 +89,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(r.imported
     ? `导入完成：${r.stations} 个站点，${r.points} 个历史点${r.secret ? "，会话密钥已沿用" : ""}`
     : `未导入：${r.reason}`);
+  console.log(`数据库文件：${resolveDbPath()}`);
   await pool.end();
 }

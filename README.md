@@ -1,4 +1,4 @@
-# 中转站余额监控 · Relay Monitor v2
+# FINE-APIHUB · 中转站余额监控 v2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -24,7 +24,6 @@
 - **人民币折算**：每站可配充值汇率（站点 $1 折合 ¥ 多少）；金额主显人民币，站点原始余额次要展示；余额告警阈值仍按站点余额判断
 - **PWA**：可添加到手机主屏幕独立运行（品牌图标 + 离线壳缓存；静态资源网络优先，API 不缓存）
 - **面板登录**：scrypt 哈希 + HMAC 签名会话 Cookie（7 天，登录失败限流）；默认 `admin / admin123`，登录后请在「设置」中修改
-- **内置演示**：空库首次启动自动创建演示中转站（内置 mock，含完整登录→过期→自动续期链路），可直接删除
 
 ## 支持的中转站类型
 
@@ -38,10 +37,10 @@
 
 ## 运行
 
-需要一个 **MySQL 8+** 实例（自备，不随面板捆绑）。
+支持 SQLite（默认，单文件）或 MySQL 8+。SQLite 模式请持久化 `DB_PATH` 所在目录。
 
 ```bash
-cp .env.example .env.local        # 填入 DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME
+cp .env.example .env.local        # SQLite 默认；MySQL 模式设置 DB_DRIVER=mysql 和 DB_* 
 npm install
 npm run db:migrate                # 建表；若配置了 V1_DATA_DIR 且库为空，一次性导入 v1 数据
 npm run build && npm start        # 打开 http://127.0.0.1:3000，账号 admin / admin123
@@ -67,7 +66,7 @@ mkdir -p ~/relay-monitor && cd ~/relay-monitor
 docker compose up -d
 ```
 
-- **relay-monitor**：面板本体（启动顺序：迁移脚本 → Next standalone 服务）；数据全部在 MySQL，容器无状态、升级不丢数据
+- **relay-monitor**：面板本体（启动顺序：迁移脚本 → Next standalone 服务）；SQLite 模式将 `/app/data` 挂载到宿主机，升级不丢数据
 - **watchtower**：自动拉取新镜像并重启面板；页面「设置 → 关于」可查看运行版本与构建 commit
 
 ## 通知渠道速查
@@ -92,11 +91,10 @@ relay-monitor/
 ├── app/                  Next.js App Router
 │   ├── (dashboard)/      面板页面：总览 / 中转站 / 我的站点 / 用量 / 经营分析 / 通知 / 设置
 │   ├── api/              27 个 REST 端点（Route Handlers，行为与 v1 一致）
-│   ├── mock/             内置演示站 mock（Sub2API / New API 完整链路）
 │   └── login/            登录页
-├── server/               后台常驻逻辑：refresh.js 刷新循环 / report.js 日报 / demo.js 演示站
+├── server/               后台常驻逻辑：refresh.js 刷新循环 / report.js 日报
 ├── lib/                  与 v1 同源：providers / alerts / notify / smtp / forecast / auth + runtime 单例
-├── db/                   MySQL 层：pool / store（写透缓存）/ history / migrate（v1 导入）
+├── db/                   数据持久化层：pool / store（写透缓存）/ history / migrate（v1 导入）
 ├── instrumentation.ts    服务启动钩子：初始化 + 定时刷新 + 日报调度
 └── public/               PWA manifest / 图标 / service worker
 ```

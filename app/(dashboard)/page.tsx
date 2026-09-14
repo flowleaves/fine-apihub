@@ -407,7 +407,6 @@ export default function OverviewPage() {
             {s.name}
             {s.isOwn ? <Tag style={{ marginInlineStart: 8 }}>我的站</Tag> : null}
             {s.noRenewal ? <Tag color="orange" style={{ marginInlineStart: 8 }}>不再续费</Tag> : null}
-            {s.demo ? <Tag style={{ marginInlineStart: 8 }}>演示</Tag> : null}
             <StatusPill st={st} />
           </div>
           <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 2 }}>{meta}</div>

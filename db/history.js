@@ -1,7 +1,7 @@
 // 余额历史快照 + 耗尽预测：算法与 v1（lib/history.js）逐字一致。
-// 持久层从 JSON 文件换成 MySQL history_points 表：内存缓存全量热数据（30 天），
+// 持久层从 JSON 文件换成 SQLite history_points 表：内存缓存全量热数据（30 天），
 // append 写内存 + 攒批写透 DB；usedSince/burnRate/predict 读内存，语义不变。
-// 落表的关系行同时供「经营分析」页做 SQL 聚合（热力图/趋势等）。
+// 落表的关系行同时供「经营分析」做聚合与备份使用。
 const MAX_POINTS = 5000; // 每站上限
 const MAX_AGE_MS = 30 * 24 * 3600 * 1000; // 保留 30 天
 const MIN_GAP_MS = 30 * 1000; // 相邻快照最小间隔
@@ -48,10 +48,12 @@ export class History {
         if (removed.length) {
           await this.pool.query("DELETE FROM history_points WHERE station_id IN (?)", [removed]);
         }
-        if (batch.length) {
+        // SQLite 不支持 `VALUES ?` 多行批量语法，逐行插入；
+        // 单批通常只有几个点（每站 60s 一个），批量大小可控。
+        for (const [stationId, t, remaining, used] of batch) {
           await this.pool.query(
-            "INSERT IGNORE INTO history_points (station_id, t, remaining, used) VALUES ?",
-            [batch]
+            "INSERT OR IGNORE INTO history_points (station_id, t, remaining, used) VALUES (?, ?, ?, ?)",
+            [stationId, t, remaining, used]
           );
         }
         // 裁剪窗口外旧数据（与内存裁剪同一口径）

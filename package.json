@@ -1,16 +1,16 @@
 {
-  "name": "relay-monitor",
+  "name": "fine-apihub",
   "version": "2.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "中转站余额监控面板 v2：Next.js 全栈 + Ant Design Pro (antd 6) + MySQL",
+  "description": "中转站余额监控面板 v2：Next.js 全栈 + Ant Design Pro (antd 6) + SQLite",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test lib/alerts.test.js lib/providers.test.js db/store.test.js server/own-helpers.test.js",
-    "db:migrate": "node db/migrate.js"
+    "test": "node --no-warnings --test lib/alerts.test.js lib/providers.test.js db/store.test.js db/history.test.js server/own-helpers.test.js app/api/analytics/aggregate.test.js",
+    "db:migrate": "node --no-warnings db/migrate.js"
   },
   "dependencies": {
     "@ant-design/nextjs-registry": "^1.3.0",

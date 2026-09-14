@@ -1,6 +1,6 @@
 // PWA Service Worker：静态资源网络优先（面板由 Watchtower 自动更新，
 // 不能让旧版本粘在缓存里），断网时回退缓存壳；API 请求不拦截（数据必须新鲜）。
-const CACHE = "relay-monitor-shell-v2";
+const CACHE = "fine-apihub-shell-v2";
 // v2（Next.js）：JS/CSS 均为带哈希的 /_next/static 资源，运行时按 fetch 缓存即可，
 // 壳清单只预缓存入口与图标（v1 的 /app.js /styles.css 已不存在）
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
@@ -20,7 +20,7 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   // 只处理同源静态 GET；API 与跨域请求直接走网络
-  if (e.request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/mock/")) return;
+  if (e.request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   e.respondWith((async () => {
     try {
       const res = await fetch(e.request);

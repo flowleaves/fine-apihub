@@ -1,6 +1,6 @@
-// MySQL 持久化的 Store：公开 API 与 v1（JSON 文件版 lib/store.js）逐字一致。
+// SQLite 持久化的 Store：公开 API 与 v1（JSON 文件版 lib/store.js）逐字一致。
 // 设计：内存缓存 this.data 保持 v1 数据形状，所有读走内存（同步 getter 不变），
-// 所有写通过 save() 串行化写透 MySQL——消费方（26 个端点/告警/日报）零改动。
+// 所有写通过 save() 串行化写透 SQLite（单文件 data/fine-apihub.db）——消费方（26 个端点/告警/日报）零改动。
 import { hashPassword } from "../lib/auth.js";
 import { ALERT_EVENT_KEYS, DEFAULT_RULES } from "../lib/alerts.js";
 
@@ -61,7 +61,8 @@ function sanitizeResoldKeys(input) {
   return out;
 }
 
-// mysql2 的 JSON 列可能返回已解析对象或字符串，统一成对象
+// 文档列可能返回已解析对象或字符串，统一成对象
+// （v1 时代是 mysql2 的 JSON 列行为；SQLite 里存 TEXT，恒为字符串）
 function asDoc(v) {
   return typeof v === "string" ? JSON.parse(v) : v;
 }
@@ -143,8 +144,7 @@ export class Store {
   // 串行化写透（并行刷新会同时触发 save）；事务保证 stations+meta 原子落库
   save() {
     this._saveChain = (this._saveChain || Promise.resolve())
-      .then(() => this._writeNow())
-      .catch((err) => console.error("保存失败:", err?.message));
+      .then(() => this._writeNow());
     return this._saveChain;
   }
 
@@ -155,11 +155,15 @@ export class Store {
       const ids = this.data.stations.map((s) => s.id);
       if (ids.length) {
         await conn.query("DELETE FROM stations WHERE id NOT IN (?)", [ids]);
-        const values = this.data.stations.map((s, i) => [s.id, i, JSON.stringify(s)]);
-        await conn.query(
-          "INSERT INTO stations (id, pos, doc) VALUES ? ON DUPLICATE KEY UPDATE pos = VALUES(pos), doc = VALUES(doc)",
-          [values]
-        );
+        // SQLite 不支持 MySQL 的 `VALUES ?` 多行批量语法，逐行 prepared 执行；
+        // 站点数量是人工维护的几十量级，性能无虞。
+        const stmt =
+          "INSERT INTO stations (id, pos, doc) VALUES (?, ?, ?) " +
+          "ON DUPLICATE KEY UPDATE pos = VALUES(pos), doc = VALUES(doc)";
+        for (let i = 0; i < this.data.stations.length; i++) {
+          const s = this.data.stations[i];
+          await conn.query(stmt, [s.id, i, JSON.stringify(s)]);
+        }
       } else {
         await conn.query("DELETE FROM stations");
       }
@@ -168,10 +172,12 @@ export class Store {
         ["auth", JSON.stringify(this.data.auth)],
         ["notifications", JSON.stringify(this.data.notifications)],
       ];
-      await conn.query(
-        "INSERT INTO meta (k, v) VALUES ? ON DUPLICATE KEY UPDATE v = VALUES(v)",
-        [metas]
-      );
+      for (const [k, v] of metas) {
+        await conn.query(
+          "INSERT INTO meta (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)",
+          [k, v]
+        );
+      }
       await conn.commit();
     } catch (err) {
       await conn.rollback().catch(() => {});
@@ -337,7 +343,6 @@ export class Store {
       fixedPurchases: sanitizePurchases(input.fixedPurchases) || [],
       // 转售给下游的管理员/root API Key（其消费计入收入而非成本）
       resoldAdminKeys: sanitizeResoldKeys(input.resoldAdminKeys) || [],
-      demo: !!input.demo,
       createdAt: new Date().toISOString(),
       s2Tokens: null, // Sub2API 密码模式的令牌缓存 {accessToken, refreshToken, expiresAt}
       alertState: null, // 告警去重状态（含不再续费站点的一次性低余额提醒时间）

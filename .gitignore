@@ -5,6 +5,11 @@ node_modules/
 # 必须锚定根目录：不加斜杠会连 app/mock/**/api/data/ 这类源码目录一起吞掉
 /data/
 
+# SQLite 数据库文件（凭证与历史全在这里；WAL 模式还会产生 -wal / -shm）
+*.db
+*.db-wal
+*.db-shm
+
 # 本地工具配置
 .claude/
 # v2 (Next.js)

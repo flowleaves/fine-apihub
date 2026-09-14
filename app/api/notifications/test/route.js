@@ -12,7 +12,7 @@ export const POST = withAuth(async (request, rt) => {
   const r = await sendToChannel(
     channel,
     "【测试通知】中转站余额监控",
-    `这是一条测试消息，来自 relay-monitor。\n渠道：${channel.name || channel.type}\n时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    `这是一条测试消息，来自 FINE-APIHUB。\n渠道：${channel.name || channel.type}\n时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
     { event: "test" }
   );
   return json(r);

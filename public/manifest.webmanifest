@@ -1,6 +1,6 @@
 {
-  "name": "中转站余额监控",
-  "short_name": "中转监控",
+  "name": "FINE-APIHUB",
+  "short_name": "FINE-APIHUB",
   "description": "sub2api / new-api 中转站余额监控与经营分析面板",
   "start_url": "/",
   "scope": "/",

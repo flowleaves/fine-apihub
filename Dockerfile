@@ -1,4 +1,4 @@
-# 中转站余额监控面板 v2（Next.js standalone + MySQL）
+# FINE-APIHUB v2（Next.js standalone + SQLite）
 # ---- 构建阶段 ----------------------------------------------------------------
 FROM node:24-alpine AS builder
 

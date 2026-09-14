@@ -254,7 +254,6 @@ function StationRow(props: {
           {s.isOwn ? <Tag color="blue" style={{ marginInlineStart: 6 }}>我的站</Tag> : null}
           {s.includeInProfit === false ? <Tag style={{ marginInlineStart: 6 }}>不计利润成本</Tag> : null}
           {s.noRenewal ? <Tag color="orange" style={{ marginInlineStart: 6 }}>不再续费</Tag> : null}
-          {s.demo ? <Tag style={{ marginInlineStart: 6 }}>演示</Tag> : null}
           {statusPill(st)}
         </div>
         <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 2 }}>{meta}</div>
