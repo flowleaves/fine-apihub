@@ -57,7 +57,7 @@ export default function LoginPage() {
           >
             <LineChartOutlined />
           </div>
-          <h1 style={{ fontSize: 17, fontWeight: 600, marginBottom: 3, color: token.colorText }}>中转站余额监控</h1>
+              <h1 style={{ fontSize: 17, fontWeight: 600, marginBottom: 3, color: token.colorText }}>FINE-APIHUB</h1>
           <p style={{ fontSize: 12, color: token.colorTextSecondary }}>请登录以继续</p>
         </div>
         <Form layout="vertical" onFinish={onFinish} requiredMark={false}>

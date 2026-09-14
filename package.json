@@ -1,10 +1,10 @@
 {
   "name": "fine-apihub",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "中转站余额监控面板 v2：Next.js 全栈 + Ant Design Pro (antd 6) + SQLite",
+  "description": "FINE-APIHUB · 中转站余额监控面板 v2：Next.js 全栈 + Ant Design Pro (antd 6) + SQLite",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

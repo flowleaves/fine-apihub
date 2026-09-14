@@ -113,7 +113,7 @@ export default function SettingsPage() {
 
   return (
     <PageContainer title="设置" subTitle="刷新策略、告警阈值与面板账号">
-      <Space direction="vertical" size={16} style={{ display: "flex" }}>
+      <Space orientation="vertical" size={16} style={{ display: "flex" }}>
         <ProCard title="全局设置" headerBordered>
           <SetRow title="自动刷新间隔" desc="后台按此间隔自动查询各中转站余额">
             <Space>
@@ -144,7 +144,7 @@ export default function SettingsPage() {
             <Alert
               type="warning"
               showIcon
-              message="当前为默认密码 admin123，建议尽快修改"
+              title="当前为默认密码 admin123，建议尽快修改"
               style={{ marginBottom: 16 }}
             />
           )}
@@ -175,7 +175,7 @@ export default function SettingsPage() {
 
         <ProCard title="关于" headerBordered>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            中转站余额监控{" "}
+            FINE-APIHUB{" "}
             {appInfo && (
               <Tag>
                 v{appInfo.version}
@@ -185,7 +185,7 @@ export default function SettingsPage() {
           </div>
           <Text type="secondary" style={{ fontSize: 12 }}>
             支持 New API（访问令牌 / sk 密钥）与 Sub2API（登录令牌 / 账号密码自动续期）。界面基于
-            Ant Design Pro 构建。凭证存储于你配置的 MySQL 数据库。
+              Next.js + Ant Design Pro 构建。凭证存储于 SQLite 或 MySQL 数据库。
           </Text>
         </ProCard>
       </Space>

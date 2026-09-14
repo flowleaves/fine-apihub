@@ -79,7 +79,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ProLayout
-      title="中转站余额监控"
+      title="FINE-APIHUB"
       logo={<LineChartOutlined style={{ fontSize: 22, color: "#1677ff" }} />}
       layout="side"
       fixSiderbar
@@ -131,7 +131,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }}
       footerRender={() => (
         <div style={{ textAlign: "center", padding: "12px 0", fontSize: 12, color: token.colorTextTertiary }}>
-          中转站余额监控
+          FINE-APIHUB
           {appInfo ? ` v${appInfo.version}${appInfo.commit ? ` (${appInfo.commit})` : ""}` : ""}
         </div>
       )}

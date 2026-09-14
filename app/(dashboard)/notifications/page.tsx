@@ -12,10 +12,11 @@ import {
   Button,
   Checkbox,
   Empty,
+  Flex,
   Input,
-  List,
   Modal,
   Select,
+  Space,
   Switch,
   Tabs,
   theme,
@@ -445,54 +446,50 @@ export default function NotificationsPage() {
           </Text>
         }
       >
-        <List
-          dataSource={channels}
-          locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  <>
-                    <div style={{ fontWeight: 600 }}>还没有通知渠道</div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      添加 Telegram、钉钉、企业微信、飞书、Bark、ntfy、Server酱或自定义 Webhook。
-                    </Text>
-                  </>
-                }
-              />
-            ),
-          }}
-          renderItem={(c: any) => {
-            const t = channelTypes.find((x) => x.value === c.type);
-            return (
-              <List.Item
-                actions={[
-                  <Switch key="enabled" checked={c.enabled !== false} onChange={() => toggleChannel(c)} title="启用/停用" />,
-                  <Button
-                    key="test"
-                    type="text"
-                    icon={<SendOutlined />}
-                    loading={rowTesting === c.id}
-                    onClick={() => testChannel(c)}
-                    title="发送测试"
-                  />,
-                  <Button key="edit" type="text" icon={<EditOutlined />} onClick={() => openChModal(c)} title="编辑" />,
-                  <Button key="del" type="text" danger icon={<DeleteOutlined />} onClick={() => deleteChannel(c)} title="删除" />,
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={
+        {channels.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <>
+                <div style={{ fontWeight: 600 }}>还没有通知渠道</div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  添加 Telegram、钉钉、企业微信、飞书、Bark、ntfy、Server酱或自定义 Webhook。
+                </Text>
+              </>
+            }
+          />
+        ) : (
+          <Flex vertical>
+            {channels.map((c: any) => {
+              const t = channelTypes.find((x) => x.value === c.type);
+              return (
+                <Flex
+                  key={c.id}
+                  align="center"
+                  justify="space-between"
+                  gap={12}
+                  style={{ padding: "12px 0", borderBottom: `1px solid ${token.colorSplit}` }}
+                >
+                  <Flex align="center" gap={12} style={{ minWidth: 0 }}>
                     <Avatar shape="square" style={{ background: token.colorPrimaryBg, color: token.colorPrimary, fontWeight: 700 }}>
                       {CH_PLATE[c.type] || "?"}
                     </Avatar>
-                  }
-                  title={c.name}
-                  description={t?.label || c.type}
-                />
-              </List.Item>
-            );
-          }}
-        />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 500 }}>{c.name}</div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{t?.label || c.type}</Text>
+                    </div>
+                  </Flex>
+                  <Space size={4}>
+                    <Switch checked={c.enabled !== false} onChange={() => toggleChannel(c)} title="启用/停用" />
+                    <Button type="text" icon={<SendOutlined />} loading={rowTesting === c.id} onClick={() => testChannel(c)} title="发送测试" />
+                    <Button type="text" icon={<EditOutlined />} onClick={() => openChModal(c)} title="编辑" />
+                    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteChannel(c)} title="删除" />
+                  </Space>
+                </Flex>
+              );
+            })}
+          </Flex>
+        )}
       </ProCard>
 
       {/* 告警规则 */}

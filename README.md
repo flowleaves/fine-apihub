@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 监控 **sub2api** 与 **new-api** 类中转站余额的自托管面板。
-**v2 技术栈**：Next.js 16 全栈（App Router + Route Handlers）+ Ant Design Pro（antd 6 + pro-components）+ MySQL 持久化，浅色 / 深色双主题。
+**v2 技术栈**：Next.js 16 全栈（App Router + Route Handlers）+ Ant Design Pro（antd 6 + pro-components）+ **SQLite 单文件持久化**，浅色 / 深色双主题。
 
-后端逻辑（站点适配、告警引擎、消费预测、日报）与 v1 同源平移——行为与 v1 完全一致；存储从 JSON 文件升级为 MySQL（余额历史落表，供经营分析 SQL 聚合）。
+后端逻辑（站点适配、告警引擎、消费预测、日报）与 v1 同源平移——行为与 v1 完全一致；存储从 JSON 文件升级为 **SQLite 单文件数据库**（余额历史落表，供经营分析聚合），无需外部数据库进程，复制 `.db` 文件即可完成迁移与备份。
 
 ## 功能
 
@@ -19,11 +19,11 @@
 - **我的站点（下游分析）**：自营 new-api 站点的分时段 / 分模型 / **分用户**用量与消费，**未来 7 天消费预测**（组合模型 + conformal 区间，历史满两周自动启用周末模式识别）
 - **分组与渠道口径 + 环比**：读 new-api `/api/data/flow`，按**分组**、**上游渠道**、**用户 × 分组**拆分消费，并与上一等长窗口对比（今天 vs 昨天同一时刻、7 天 vs 前 7 天），跳变一眼可见——换上游渠道、某个分组倍率涨这类原因在只有模型维度的看板里看不出来
 - **日志精算（补上看板漏计的 token）**：new-api 看板的 `token_used` 只写 `prompt + completion`，**缓存读 / 缓存写不在里面**，于是 Claude 这类缓存占九成的模型会显示成「token 近零、消费很大」。精算按需翻消费日志明细（`/api/log/`，可选 2 千～2 万条），算出真实 token（含缓存读写）、缓存读写量、**长上下文请求数与消费**（≥20 万 token，含 `matched_tier` 阶梯计价）与平均计价倍率；受影响的行在明细表里标「倍率/缓存计价」，各表另有 `¥/M` 有效单价与环比列
-- **利润分析**：下游收入（普通用户消费 × 售价汇率）− 全部监控上游的期内成本（不要求出现在 New API 渠道列表；用量 × 充值汇率，固定成本按天摊销）；用量接口返回空数据但余额确有下降时自动回退历史推算；纯观察或重复汇总节点可关闭“计入利润成本”；支持渠道匹配别名（容器域名 / 内网 IP）；**管理员 / root 转售 Key 可标记计入收入**；缺省汇率会明确标记利润不完整
+- **利润分析**：下游收入（普通用户消费 × 售价汇率）− 全部监控上游的期内成本（不要求出现在 New API 渠道列表；用量 × 充值汇率，固定成本按天摊销）；用量接口返回空数据但余额确有下降时自动回退历史推算；纯观察或重复汇总节点可关闭"计入利润成本"；支持渠道匹配别名（容器域名 / 内网 IP）；**管理员 / root 转售 Key 可标记计入收入**；缺省汇率会明确标记利润不完整
 - **每日日报**：每天定时（默认北京时间，可用 `REPORT_TIME_ZONE` 覆盖）汇总昨日经营——消费环比、收入/成本/利润、Top 模型与用户、上游余额与耗尽预警、未来 7 天预测——推送到通知渠道（邮件全文，IM 截断）；支持预览与立即发送
 - **人民币折算**：每站可配充值汇率（站点 $1 折合 ¥ 多少）；金额主显人民币，站点原始余额次要展示；余额告警阈值仍按站点余额判断
 - **PWA**：可添加到手机主屏幕独立运行（品牌图标 + 离线壳缓存；静态资源网络优先，API 不缓存）
-- **面板登录**：scrypt 哈希 + HMAC 签名会话 Cookie（7 天，登录失败限流）；默认 `admin / admin123`，登录后请在「设置」中修改
+- **面板登录**：scrypt 哈希 + HMAC 签名会话 Cookie（7 天，登录失败限流，**HTTPS 自动启用 Secure 标记**）；默认 `admin / admin123`，登录后请在「设置」中修改
 
 ## 支持的中转站类型
 
@@ -37,37 +37,42 @@
 
 ## 运行
 
-支持 SQLite（默认，单文件）或 MySQL 8+。SQLite 模式请持久化 `DB_PATH` 所在目录。
+**SQLite 单文件模式（默认，推荐）**：无需安装 MySQL，数据库就是项目目录下的 `data/fine-apihub.db`。
 
 ```bash
-cp .env.example .env.local        # SQLite 默认；MySQL 模式设置 DB_DRIVER=mysql 和 DB_* 
+cp .env.example .env.local        # SQLite 默认；MySQL 模式设置 DB_DRIVER=mysql 和 DB_*
 npm install
-npm run db:migrate                # 建表；若配置了 V1_DATA_DIR 且库为空，一次性导入 v1 数据
+npm run db:migrate                # 建库；若配置了 V1_DATA_DIR 且库为空，一次性导入 v1 数据
 npm run build && npm start        # 打开 http://127.0.0.1:3000，账号 admin / admin123
 ```
 
-开发模式：`npm run dev`。对外暴露前请务必修改默认密码，并建议置于 HTTPS 反代之后。
+开发模式：`npm run dev`。对外暴露前请务必修改默认密码，并**建议置于 HTTPS 反代之后**（Cookie Secure 标记依赖 HTTPS）。
+
+数据库文件位置：
+- 默认：`data/fine-apihub.db`（项目根目录）
+- 自定义：`DB_PATH=/path/to/your.db`
+
+**备份**：直接复制 `.db` 文件即可（WAL 模式下建议使用 SQLite 的 `backup()` API 保证一致性）。
 
 ## 从 v1 迁移
 
 v1 的 `data/` 目录（stations.json / history.json / secret.key）可一次性导入：
 
-1. 设环境变量 `V1_DATA_DIR` 指向 v1 的 data 目录（Docker 场景把目录只读挂载进容器）
+1. 设环境变量 `V1_DATA_DIR` 指向 v1 的 data 目录
 2. 启动（或 `npm run db:migrate`）：**库为空才导入**，幂等、绝不覆盖已有数据；会话密钥一并沿用，已登录设备不掉线
 3. 导入完成后可移除 `V1_DATA_DIR` 配置
 
-## Docker 部署（含 Watchtower 自动更新）
-
-镜像随 main 分支推送自动构建：`ghcr.io/lettimepassby/relay-monitor:latest`。
+## Docker 部署（可选）
 
 ```bash
-mkdir -p ~/relay-monitor && cd ~/relay-monitor
-# 下载 deploy/docker-compose.yml，填好 DB_* 环境变量（连接你自有的 MySQL），然后：
+mkdir -p ~/fine-apihub && cd ~/fine-apihub
+cp deploy/docker-compose.yml .
+# 按需调整环境变量，然后：
 docker compose up -d
 ```
 
-- **relay-monitor**：面板本体（启动顺序：迁移脚本 → Next standalone 服务）；SQLite 模式将 `/app/data` 挂载到宿主机，升级不丢数据
-- **watchtower**：自动拉取新镜像并重启面板；页面「设置 → 关于」可查看运行版本与构建 commit
+- **fine-apihub**：面板本体；SQLite 模式将 `./db-data` 挂载到宿主机，升级不丢数据
+- **watchtower**：自动拉取新镜像并重启面板
 
 ## 通知渠道速查
 
@@ -87,25 +92,37 @@ docker compose up -d
 ## 目录结构
 
 ```
-relay-monitor/
+fine-apihub/
 ├── app/                  Next.js App Router
 │   ├── (dashboard)/      面板页面：总览 / 中转站 / 我的站点 / 用量 / 经营分析 / 通知 / 设置
-│   ├── api/              27 个 REST 端点（Route Handlers，行为与 v1 一致）
+│   ├── api/              25 个 REST 端点（Route Handlers）
 │   └── login/            登录页
 ├── server/               后台常驻逻辑：refresh.js 刷新循环 / report.js 日报
-├── lib/                  与 v1 同源：providers / alerts / notify / smtp / forecast / auth + runtime 单例
-├── db/                   数据持久化层：pool / store（写透缓存）/ history / migrate（v1 导入）
+├── lib/                  核心逻辑：providers / alerts / notify / smtp / forecast / auth + runtime 单例
+├── db/                   数据持久化层：pool（SQLite/MySQL 双驱动）/ store / history / migrate
+├── spec/                 规范文档：架构 / API / 数据模型 / 安全 / 预测 / Sub2API Key 用量
+├── data/                 运行时数据（SQLite 库 + WAL）——已 gitignore，含凭证
 ├── instrumentation.ts    服务启动钩子：初始化 + 定时刷新 + 日报调度
 └── public/               PWA manifest / 图标 / service worker
 ```
 
 ## 安全说明
 
-- 面板密码以 scrypt 哈希存储；会话为 HMAC-SHA256 签名的 HttpOnly Cookie
-- 中转站凭证保存于你自有的 MySQL（`stations` 表）——这是查询上游所必需的；请妥善保护数据库访问权限
-- API 响应中不回传任何令牌 / 密钥 / 密码原文
-- 构建产物经文件追踪排除，凭证目录绝不进入镜像
+- 面板密码以 **scrypt** 哈希存储；会话为 HMAC-SHA256 签名的 HttpOnly Cookie
+- **Cookie Secure 标记**：HTTPS 部署时自动启用（通过 `X-Forwarded-Proto` 或请求协议检测）
+- **安全响应头**：全局启用 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=()`
+- API 路由启用 `Cache-Control: no-store`，防止代理/浏览器缓存敏感数据
+- 中转站凭证保存于 SQLite 数据库（`data/fine-apihub.db`）——请妥善保护数据库文件
+- API 响应中不回传任何令牌 / 密钥 / 密码原文（统一脱敏处理）
+- 登录失败限流：同 IP 失败 10 次锁定 5 分钟
+- 构建产物经文件追踪排除，凭证目录与数据库文件绝不进入镜像
+
+## 测试
+
+```bash
+npm test        # 运行全部 45 项测试
+```
 
 ## 开源协议
 
-[MIT](LICENSE) © lettimepassby
+[MIT](LICENSE) © FINE-APIHUB（基于 lettimepassby/relay-monitor 二创）

@@ -1,5 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 显式声明项目根：家目录里也有 package-lock.json，Next 向上查找会误判 workspace root，
+  // 进而影响 outputFileTracingExcludes 的相对路径基准。锁死为项目目录。
+  turbopack: { root: import.meta.dirname },
+  outputFileTracingRoot: import.meta.dirname,
+  // 开发期允许的跨源来源：Next 16 默认阻止非 localhost 的 dev 资源请求，
+  // 经局域网 IP 访问时 /_next/webpack-hmr 的 WebSocket 会被拒（控制台刷满 ws 报错）。
+  // 仅影响 dev，不影响生产构建。换网络后把新的局域网 IP 追加进来即可。
+  allowedDevOrigins: ["localhost", "127.0.0.1", "192.168.31.168"],
   // Docker 部署用 standalone 产物（node server.js 单进程，含后台刷新循环）
   output: "standalone",
   // 原生/CJS 服务端依赖不打包进 serverless bundle；Cap 的 WASM 文件需保留原始目录结构。

@@ -540,7 +540,7 @@ export default function StationsPage() {
             <Select options={types.map((t) => ({ value: t.value, label: t.label }))} />
           </Form.Item>
           <Form.Item label="站点地址" name="baseUrl" style={{ marginBottom: 12 }}>
-            <Input placeholder="https://your-relay.com" />
+            <Input placeholder="https://api.example.com" />
           </Form.Item>
           {needs.includes("accessToken") && (
             <Form.Item

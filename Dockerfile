@@ -7,7 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-# 构建期不连库（运行时才初始化 MySQL）；占位值避免构建意外读到真实环境
+# 构建期不连库；数据库仅在运行时初始化
 ENV DB_HOST=build-placeholder
 RUN npx next build
 

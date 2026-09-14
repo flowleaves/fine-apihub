@@ -1,6 +1,6 @@
 // SQLite 持久化的 Store：公开 API 与 v1（JSON 文件版 lib/store.js）逐字一致。
 // 设计：内存缓存 this.data 保持 v1 数据形状，所有读走内存（同步 getter 不变），
-// 所有写通过 save() 串行化写透 SQLite（单文件 data/fine-apihub.db）——消费方（26 个端点/告警/日报）零改动。
+// 所有写通过 save() 串行化写透 SQLite（单文件 data/fine-apihub.db）——消费方（各 API 端点/告警/日报）零改动。
 import { hashPassword } from "../lib/auth.js";
 import { ALERT_EVENT_KEYS, DEFAULT_RULES } from "../lib/alerts.js";
 

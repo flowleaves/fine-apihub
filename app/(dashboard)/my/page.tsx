@@ -492,7 +492,7 @@ export default function MyStationPage() {
 
       {/* ---- 利润分析（v1 profitSection）---- */}
       {p && p.error ? (
-        <Alert style={{ marginTop: 14 }} type="warning" showIcon message={`利润分析不可用：${p.error}`} />
+        <Alert style={{ marginTop: 14 }} type="warning" showIcon title={`利润分析不可用：${p.error}`} />
       ) : null}
       {p && !p.error ? (
         <>
@@ -501,7 +501,7 @@ export default function MyStationPage() {
               style={{ marginTop: 14 }}
               type={p.complete ? "info" : "warning"}
               showIcon
-              message={!p.complete ? "利润数据尚不完整" : p.estimated ? "成本中包含估算值" : "利润口径提示"}
+              title={!p.complete ? "利润数据尚不完整" : p.estimated ? "成本中包含估算值" : "利润口径提示"}
               description={p.warnings.join("；")}
             />
           ) : null}
@@ -519,11 +519,11 @@ export default function MyStationPage() {
               <KpiCard><Statistic title="期内成本" value={cny(p.totalCostCny)} /></KpiCard>
             </Col>
             <Col xs={12} md={6}>
-              <KpiCard><Statistic title="利润" value={cny(p.profitCny)} valueStyle={{ color: profitColor }} /></KpiCard>
+              <KpiCard><Statistic title="利润" value={cny(p.profitCny)} styles={{ content: { color: profitColor } }} /></KpiCard>
             </Col>
             <Col xs={12} md={6}>
               <KpiCard>
-                <Statistic title="利润率" value={p.marginPct != null ? p.marginPct + "%" : "—"} valueStyle={{ color: profitColor }} />
+                <Statistic title="利润率" value={p.marginPct != null ? p.marginPct + "%" : "—"} styles={{ content: { color: profitColor } }} />
               </KpiCard>
             </Col>
           </Row>
@@ -554,7 +554,7 @@ export default function MyStationPage() {
             <Alert
               type="info"
               showIcon
-              message="还没有标记转售 Key。若某个管理员/root 账号的 API Key 实际给了下游，点「管理转售 Key」勾选它，其消费即计入收入。"
+              title="还没有标记转售 Key。若某个管理员/root 账号的 API Key 实际给了下游，点「管理转售 Key」勾选它，其消费即计入收入。"
             />
           )}
           {mgrOpen ? (
@@ -562,9 +562,9 @@ export default function MyStationPage() {
               {mgrLoading ? (
                 <div style={{ padding: 20, textAlign: "center", color: token.colorTextSecondary }}>正在拉取管理员账号的 Key…</div>
               ) : mgrError ? (
-                <Alert type="warning" showIcon message={`拉取失败：${mgrError}`} />
+                <Alert type="warning" showIcon title={`拉取失败：${mgrError}`} />
               ) : !accounts || !accounts.length ? (
-                <Alert type="warning" showIcon message="没有找到管理员/root 账号（role ≥ 10）。" />
+                <Alert type="warning" showIcon title="没有找到管理员/root 账号（role ≥ 10）。" />
               ) : (
                 <>
                   <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 10 }}>
@@ -663,7 +663,7 @@ export default function MyStationPage() {
               style={{ marginTop: 14 }}
               type="warning"
               showIcon
-              message="没有启用计入利润成本的上游，成本暂计 ¥0"
+              title="没有启用计入利润成本的上游，成本暂计 ¥0"
             />
           )}
 
@@ -988,14 +988,14 @@ export default function MyStationPage() {
         }`}
       />
       {flow?.error ? (
-        <Alert type="warning" showIcon message={`分组/渠道口径不可用：${flow.error}`} style={{ marginBottom: 12 }} />
+        <Alert type="warning" showIcon title={`分组/渠道口径不可用：${flow.error}`} style={{ marginBottom: 12 }} />
       ) : null}
       {flow && !flow.error && flow.coveragePct != null && flow.coveragePct < 95 ? (
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message={`分组口径只覆盖 ${flow.coveragePct}% 的消费：new-api 的流向查询会跳过没有分组字段的历史记录`}
+          title={`分组口径只覆盖 ${flow.coveragePct}% 的消费：new-api 的流向查询会跳过没有分组字段的历史记录`}
         />
       ) : null}
       {flow && !flow.error ? (
@@ -1077,7 +1077,7 @@ export default function MyStationPage() {
         }
       />
       <ProCard>
-        {auditError ? <Alert type="error" showIcon message={`精算失败：${auditError}`} style={{ marginBottom: 12 }} /> : null}
+        {auditError ? <Alert type="error" showIcon title={`精算失败：${auditError}`} style={{ marginBottom: 12 }} /> : null}
         {!audit ? (
           <Text type="secondary">
             看板的 token 只有 prompt + completion；Claude 这类缓存占九成的模型会显示成「token 近零、消费很大」。

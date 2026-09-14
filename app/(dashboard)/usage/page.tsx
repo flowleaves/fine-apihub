@@ -346,8 +346,8 @@ export default function UsagePage() {
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message={
-                <Space direction="vertical" size={2}>
+              title={
+                <Space orientation="vertical" size={2}>
                   {agg.errSts.map((s: any) => (
                     <span key={s.id}>
                       {s.name}：{s.error}

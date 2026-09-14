@@ -219,7 +219,7 @@ export default function TrendModal({
               <Statistic
                 title="预计耗尽"
                 value={pred?.etaDays != null ? fmtEta(pred.etaDays) : "—"}
-                valueStyle={eta?.cls ? { color: eta.cls === "danger" ? COLOR.danger : COLOR.warn } : undefined}
+                styles={{ content: eta?.cls ? { color: eta.cls === "danger" ? COLOR.danger : COLOR.warn } : undefined }}
               />
             </Col>
           </Row>
