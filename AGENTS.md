@@ -51,9 +51,15 @@ fork 自 `lettimepassby/relay-monitor`，核心改造：MySQL → SQLite 单文�
 ```bash
 npm test            # node --test（非 jest/vitest）：45 项，约 7s，全绿
 npm run dev         # 开发模式
-npm run build       # → standalone 产物
+npm run build       # → standalone 产物（末尾自动跑 check-standalone 守卫）
+npm run build:webpack          # 同上，但用 webpack 构建（standalone 更精简）
+npm run check:standalone       # 守卫 strict 模式：产物含 *.db/.env 即失败（CI 门禁）
 npm run db:migrate  # 幂等；库非空即跳过
 ```
+
+> 🔴 **不要移除构建守卫**：`next build` 会把 `data/`（真实凭证库）拷进 `.next/standalone`，而 Dockerfile 正是拷它。
+> `outputFileTracingExcludes` 在 Next 16.2.10 下**无效**（Turbopack 会拷贝整个项目目录）。
+> 兜底 = `tools/check-standalone.mjs`（构建后删库 + 告警）+ `Dockerfile` 的断言。详见 `spec/SECURITY.md` §3.3。
 
 - **运行方式**：`next.config.mjs` 设了 `output: "standalone"`，所以 `npm start`（`next start`）会告警，**规范做法**是
   `node .next/standalone/server.js`（需先把 `.next/static` 与 `public` 拷进 `.next/standalone`，见 `Dockerfile`）。
@@ -64,7 +70,11 @@ npm run db:migrate  # 幂等；库非空即跳过
 
 ## 5. 已知待办 / 遗留（2026-09-17 通读发现）
 
-- `.env.example` 仍只写 MySQL，未提 SQLite 默认值与 `DB_DRIVER` / `DB_PATH` / `REPORT_TIME_ZONE`。
-- `deploy/docker-compose.yml` 镜像指向 `ghcr.io/lettimepassby/fine-apihub:latest`（上游命名空间），与本仓 `flowleaves` 不一致。
-- `package.json` 版本 `2.3.0` 与 `CHANGELOG.md` 顶部 `[2.3.1]` 不一致。
-- 通读结论见工作区 `.agents/MEMORY.md` §22。
+- ✅ **已修** `.env.example` → 重写为 SQLite 优先，补齐 `DB_PATH` / `DB_DRIVER` / `REPORT_TIME_ZONE` / `TZ` / `V1_DATA_DIR` / `APP_COMMIT`（与代码逐一对齐，全部可选）。
+- ✅ **已修** 版本号三处不一致（`package.json`=2.3.0、`package-lock.json`=**2.2.0**、CHANGELOG 顶部=2.3.1）→ 统一为 **2.3.1**。
+  ⚠️ `/api/meta` 的 `app.version` 读的是**构建时**的 `package.json`，改完**必须重新 `npm run build`** 才生效。
+- ✅ **已修** `deploy/docker-compose.yml` 镜像引用 → 关键事实：**原引用 `ghcr.io/lettimepassby/fine-apihub:latest` 并不存在**
+  （实测 GHCR：该名字返回 403＝不存在；`lettimepassby` 名下只有**私有**的 `relay-monitor`；`flowleaves` 名下无 `fine-apihub`）。
+  现改为 `ghcr.io/flowleaves/fine-apihub:latest` + **`build:` 段**（从源码构建，本仓无镜像 CI），watchtower 段默认注释。
+- 遗留：根 `.gitignore`「独立 git 仓库」段仍缺 `/new-api/`、`/SillyTavern/`（各带 `.git`，当前在根仓库显示为未跟踪）。
+- 通读结论见工作区 `.agents/MEMORY.md` §22；边界见根 `spec/fine-apihub/SPEC.md`。

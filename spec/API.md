@@ -527,6 +527,6 @@ Expires: 0
   "channelTypes": [ /* 通知渠道类型列表 */ ],
   "settings": { /* 当前全局设置 */ },
   "rules": { /* 当前告警规则 */ },
-  "app": { "version": "2.3.0", "commit": "a1b2c3d" }
+  "app": { "version": "2.3.1", "commit": "a1b2c3d" }
 }
 ```

@@ -10,7 +10,26 @@ All notable changes from the upstream `lettimepassby/relay-monitor` project are 
     - `lib/auth.js` 改为导出 `COOKIE_NAME`，`lib/api.js` 复用该常量，消除两处硬编码重复
   - 运行时单例 `globalThis.__RELAY_RT` → `globalThis.__FA_RT`（`lib/runtime.js`）
   - 通知渠道示例发件人 `Relay Monitor` → `FINE-APIHUB`（`lib/notify.js`，2 处）
-- `package.json` 版本号 `2.2.0` → `2.3.0`（与 CHANGELOG 对齐）；`description` 补品牌前缀
+- `package.json` 版本号 `2.2.0` → `2.3.1`（与 CHANGELOG 对齐）；`description` 补品牌前缀
+
+### Security
+- **修复构建产物泄露运行时凭证**（实测发现）：`next build` 会把 `data/` 连同真实凭证库拷进 `.next/standalone`，而 `Dockerfile` 正是 `COPY .next/standalone` → **镜像会带上站点 accessToken / JWT / 明文密码、面板密码哈希与会话密钥**
+  - 根因：`next.config.mjs::outputFileTracingExcludes` 在 Next 16.2.10 下**未生效**——Turbopack（默认）无法静态解析 `path.join(process.cwd(), ...)`，会把整个项目目录拷进 `standalone`；`--webpack` 构建结构干净但仍会带入 `data/fine-apihub.db`
+  - 新增 `tools/check-standalone.mjs`：构建后扫描产物，发现 `*.db*` / `.env*` / `data/` 即删除并告警；已接入 `npm run build`，另有 `npm run check:standalone`（`--strict`，CI 门禁用）
+  - `Dockerfile` 运行阶段新增清理 + 断言：镜像内若存在任何数据库文件则**构建失败**
+  - 新增 `npm run build:webpack`（产出更精简的 standalone，无 `spec/`/`deploy/` 等冗余目录）
+  - 详见 `spec/SECURITY.md` §3.3
+
+### Fixed
+- **版本号三处不一致**修正：`package.json` 原为 `2.3.0`、`package-lock.json` 原为 `2.2.0`、CHANGELOG 顶部为 `2.3.1`
+  - 三处统一为 `2.3.1`（`/api/meta` 的 `app.version` 取自 `package.json`，需重新构建后生效）
+  - `spec/API.md` 的 `app.version` 示例同步更新
+- `.env.example` 重写为 **SQLite 优先**：原文只列 MySQL 且标注"必填"，与 README「SQLite 默认」自相矛盾
+  - 补充实际支持的变量：`DB_PATH`、`DB_DRIVER`、`REPORT_TIME_ZONE`、`TZ`、`V1_DATA_DIR`、`APP_COMMIT`（均与 `db/pool.js` / `db/migrate.js` / `server/report.js` 的实现逐一对齐）
+  - 全部改为可选并注明默认值（零配置即可运行）
+- `deploy/docker-compose.yml` 镜像引用修正：原 `ghcr.io/lettimepassby/fine-apihub:latest` **并不存在**（实测 GHCR 返回 403；`lettimepassby` 名下只有私有的 `relay-monitor`，`flowleaves` 名下无 `fine-apihub`）
+  - 改为 `ghcr.io/flowleaves/fine-apihub:latest` + **新增 `build:` 段**，使 `docker compose up -d --build` 可直接从源码构建（本仓无镜像 CI，上游镜像为 MySQL 老版不可用）
+  - watchtower 段默认注释：仅在自有镜像发布到 GHCR 后才有意义（此前会拉取不存在的镜像）
 
 ### Breaking
 - **Cookie 名变更会使既有登录会话失效**：升级后需重新登录一次（旧 `rm_session` Cookie 不再被识别）。

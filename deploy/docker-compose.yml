@@ -1,44 +1,73 @@
-# 服务器部署：面板 + Watchtower 自动更新
-# 默认使用 SQLite；设置 DB_DRIVER=mysql 并填写 DB_* 可切换到外部 MySQL。
-# 首次切换 v2：把 v1 的 data/ 目录只读挂载进来并设 V1_DATA_DIR，库为空时启动自动一次性导入。
-# 用法：mkdir -p ~/fine-apihub && cp docker-compose.yml ~/fine-apihub/ && cd ~/fine-apihub && docker compose up -d
+# ============================================================
+# FINE-APIHUB 服务器部署：面板 +（可选）Watchtower 自动更新
+# ============================================================
+# 默认 SQLite：数据库就是挂载到宿主机的 ./db-data/fine-apihub.db，复制该文件即完成备份。
+# 设 DB_DRIVER=mysql 并填 DB_* 可切到外部 MySQL 实例（完整变量见仓库根的 .env.example）。
+#
+# ⚠️ 本仓库**没有预构建镜像**：
+#   - `ghcr.io/flowleaves/fine-apihub` 尚未发布（本仓已移除 Docker CI，只做本地部署）；
+#   - 上游 `ghcr.io/lettimepassby/relay-monitor` 是 MySQL 时期的旧版，与 v2 的 SQLite 不兼容。
+#   因此这里用 `build:` 从源码构建。将来若把镜像发布到上面的名字，可改为 `docker compose pull`，
+#   并启用文件末尾的 watchtower 段做自动更新。
+#
+# 用法（在本文件所在目录执行，需要源码）：
+#   cd fine-apihub/deploy
+#   docker compose up -d --build
+# 访问 http://<服务器>:8787 ，默认账号 admin / admin123（**请立即改密码**）
+# 数据落在 deploy/db-data/ ；升级 = git pull 后再 docker compose up -d --build
+# 首次从 v1（JSON 文件版）迁移：把 v1 的 data/ 放到仓库根的 data/，保持下面 V1_DATA_DIR 挂载即可自动一次性导入
+# ============================================================
 services:
   fine-apihub:
-    image: ghcr.io/lettimepassby/fine-apihub:latest
+    # 有 build 段时，本地镜像不存在会自动构建并打上这个 tag；将来发布到 GHCR 后亦可直接 pull。
+    image: ghcr.io/flowleaves/fine-apihub:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
     container_name: fine-apihub
     restart: unless-stopped
     ports:
       - "8787:8787"
     environment:
-      # 「今日消耗 / 用量统计」的日期边界按此时区计算
+      # 「今日消耗 / 用量统计」的日期边界按此时区计算（镜像内已装 tzdata）
       - TZ=Asia/Shanghai
       # 日报的统计日界线与定时发送时区（未设置时也默认 Asia/Shanghai）
       - REPORT_TIME_ZONE=Asia/Shanghai
       # ---- 数据库：sqlite（默认）或 mysql ----
       - DB_DRIVER=sqlite
       - DB_PATH=/app/data/fine-apihub.db
-      - DB_HOST=change-me
-      - DB_PORT=3306
-      - DB_USER=relay
-      - DB_PASSWORD=change-me
-      - DB_NAME=relay_monitor
-      # ---- v1 数据一次性迁移（可选）：导入完成后可删除这两行 ----
+      # ---- 切到外部 MySQL 时取消下面注释，并把上面的 DB_DRIVER 改成 mysql ----
+      # - DB_HOST=127.0.0.1
+      # - DB_PORT=3306
+      # - DB_USER=relay
+      # - DB_PASSWORD=
+      # - DB_NAME=relay_monitor
+      # ---- v1 数据一次性迁移（可选）：导入完成后可删掉本行与下面第二条只读挂载 ----
       - V1_DATA_DIR=/app/v1-data
     volumes:
-      - ./data:/app/v1-data:ro
+      # SQLite 库与 WAL 文件放宿主机：升级 / 重建容器不丢数据
       - ./db-data:/app/data
+      # v1 旧版 data/（仓库根目录）；不存在也只是跳过导入，不会报错
+      - ../data:/app/v1-data:ro
 
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      # GHCR 私有镜像：把 docker login 的凭证挂给 watchtower
-      #（用 sudo docker login 登录的话凭证在 /root/.docker/config.json）
-      - /root/.docker/config.json:/config.json:ro
-    environment:
-      # 新版 Docker 守护进程要求 API >= 1.40，watchtower 默认协商值过老
-      - DOCKER_API_VERSION=1.44
-    # 每分钟检查一次 fine-apihub 的新镜像，更新后清理旧镜像
-    command: --cleanup --interval 60 fine-apihub
+# ------------------------------------------------------------
+# 可选：Watchtower 自动拉取新镜像并重启面板
+# ✅ 仅当镜像已发布到镜像仓库（如 CI 推送到 ghcr.io/flowleaves/fine-apihub）时才有意义。
+#    当前无预构建镜像，默认注释掉——否则它会反复尝试拉取不存在的镜像。
+#    启用前注意：`/root/.docker/config.json` 必须真实存在（私有镜像需先 docker login），
+#    否则 Docker 会把它当目录创建，导致 watchtower 拿不到凭据。
+# ------------------------------------------------------------
+#  watchtower:
+#    image: containrrr/watchtower
+#    container_name: watchtower
+#    restart: unless-stopped
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock
+#      # GHCR 私有镜像：把 docker login 的凭证挂给 watchtower
+#      #（用 sudo docker login 登录的话凭证在 /root/.docker/config.json）
+#      - /root/.docker/config.json:/config.json:ro
+#    environment:
+#      # 新版 Docker 守护进程要求 API >= 1.40，watchtower 默认协商值过老
+#      - DOCKER_API_VERSION=1.44
+#    # 每分钟检查一次 fine-apihub 的新镜像，更新后清理旧镜像
+#    command: --cleanup --interval 60 fine-apihub

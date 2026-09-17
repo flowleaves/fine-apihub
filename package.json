@@ -1,13 +1,15 @@
 {
   "name": "fine-apihub",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "license": "MIT",
   "type": "module",
   "description": "FINE-APIHUB · 中转站余额监控面板 v2：Next.js 全栈 + Ant Design Pro (antd 6) + SQLite",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node tools/check-standalone.mjs",
+    "build:webpack": "next build --webpack && node tools/check-standalone.mjs",
+    "check:standalone": "node tools/check-standalone.mjs --strict",
     "start": "next start",
     "test": "node --no-warnings --test lib/alerts.test.js lib/providers.test.js db/store.test.js db/history.test.js server/own-helpers.test.js app/api/analytics/aggregate.test.js",
     "db:migrate": "node --no-warnings db/migrate.js"

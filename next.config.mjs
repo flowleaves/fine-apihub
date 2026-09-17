@@ -13,8 +13,16 @@ const nextConfig = {
   // 原生/CJS 服务端依赖不打包进 serverless bundle；Cap 的 WASM 文件需保留原始目录结构。
   // 注：SQLite 走 Node 内置的 node:sqlite，无需在此登记。
   serverExternalPackages: ["@cap.js/wasm"],
-  // 运行时数据（站点凭证/会话密钥/SQLite 库文件）绝不进构建产物：
-  // 文件追踪会因代码引用 ./data 路径把整个目录拷进 standalone，必须显式排除
+  // 运行时数据（站点凭证 / 会话密钥 / SQLite 库文件）绝不进构建产物。
+  // ⚠️ 实测（Next 16.2.10）：下面的 excludes **并未生效**，两种构建路径都漏——
+  //   · Turbopack（默认）：无法静态解析 path.join(process.cwd(), ...)，会把整个项目目录拷进
+  //     standalone（data/、spec/、deploy/、*.md 全在内）；
+  //   · webpack（next build --webpack）：结构干净，但仍会带入 db/pool.js 里字面量拼出的
+  //     data/fine-apihub.db。
+  // 保留本配置以防上游版本修好该行为，但**真正的兜底**是另外两处：
+  //   1) `npm run build` 末尾的 tools/check-standalone.mjs（发现即删 + 告警；--strict 时失败）
+  //   2) Dockerfile 运行阶段的 rm + 「镜像内不得有 *.db」断言
+  // 改动其中任何一处后，请重跑 `npm run build` 并确认 .next/standalone 内无 *.db。
   outputFileTracingExcludes: { "*": ["./data/**", "data/**", "*.db", "*.db-wal", "*.db-shm"] },
   // antd/pro-components ESM 转译
   transpilePackages: [

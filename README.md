@@ -64,15 +64,16 @@ v1 的 `data/` 目录（stations.json / history.json / secret.key）可一次性
 
 ## Docker 部署（可选）
 
+> ⚠️ 本仓库**没有预构建镜像**：Docker CI 已移除（`spec/SECURITY.md`），上游 `ghcr.io/lettimepassby/relay-monitor` 是 MySQL 时期的旧版、与 v2 的 SQLite 不兼容。因此 compose 里用 `build:` **从源码构建**，需要在仓库内执行。
+
 ```bash
-mkdir -p ~/fine-apihub && cd ~/fine-apihub
-cp deploy/docker-compose.yml .
-# 按需调整环境变量，然后：
-docker compose up -d
+cd fine-apihub/deploy
+docker compose up -d --build        # 首次构建约几分钟
 ```
 
-- **fine-apihub**：面板本体；SQLite 模式将 `./db-data` 挂载到宿主机，升级不丢数据
-- **watchtower**：自动拉取新镜像并重启面板
+- **fine-apihub**：面板本体，容器内监听 `8787`；SQLite 库挂在 `deploy/db-data/`，升级不丢数据（`git pull` 后重新 `up -d --build`）
+- **watchtower**（compose 里默认注释）：自动拉取新镜像并重启面板——**仅在把镜像发布到 GHCR 后才有意义**，启用方法与注意事项见 compose 文件末尾
+- 切到外部 MySQL：把 `DB_DRIVER` 改成 `mysql` 并填 `DB_*`（完整变量见 `.env.example`）
 
 ## 通知渠道速查
 
@@ -115,7 +116,7 @@ fine-apihub/
 - 中转站凭证保存于 SQLite 数据库（`data/fine-apihub.db`）——请妥善保护数据库文件
 - API 响应中不回传任何令牌 / 密钥 / 密码原文（统一脱敏处理）
 - 登录失败限流：同 IP 失败 10 次锁定 5 分钟
-- 构建产物经文件追踪排除，凭证目录与数据库文件绝不进入镜像
+- 构建产物经 `tools/check-standalone.mjs` 与 `Dockerfile` 双重兜底：**凭证目录与数据库文件绝不进入镜像**（Next 的文件追踪本身拦不住，曾实测泄露，见 `spec/SECURITY.md` §3.3）
 
 ## 测试
 

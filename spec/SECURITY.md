@@ -98,6 +98,28 @@ function isSecureRequest(request) {
 - **sub2api 密码**：明文存储（因需要自动登录，无法哈希）
 - **改善方向**：可考虑用 OS keychain / DPAPI 加密 `password` 和 `apiKey`
 
+### 构建产物隔离（2026-09-17 实测发现并修复）
+
+> ⚠️ **曾经的漏洞**：`next build` 会把 `data/` 连同真实凭证库拷进 `.next/standalone`。
+
+实测（Next.js 16.2.10，从零构建复现）`next.config.mjs::outputFileTracingExcludes` **并未生效**：
+
+| 构建路径 | 行为 |
+|---|---|
+| **Turbopack**（默认） | 无法静态解析 `path.join(process.cwd(), ...)`，保守地把**整个项目目录**拷进 `standalone`：`data/`（含 WAL 与 `_legacy/` 旧库）、`spec/`、`deploy/`、`*.md` 全在内 |
+| **webpack**（`next build --webpack`） | 结构干净得多，但仍会把 `db/pool.js::resolveDbPath()` 里字面量拼出的 `data/fine-apihub.db` 带进去 |
+
+因为 `Dockerfile` 是 `COPY --from=builder /app/.next/standalone ./`，**镜像会带上站点 accessToken / JWT / 明文密码、面板密码哈希与会话密钥**；`.dockerignore` 的 `data` 只作用于构建上下文（`COPY . .`），拦不住 `next build` 自己写进去的那份。
+
+**现有两层兜底（改任一处前先读这段）**：
+
+1. **`tools/check-standalone.mjs`**（已接入 `npm run build`）：构建后扫描 `.next/standalone`，发现 `*.db` / `*.db-wal` / `*.db-shm` / `.env*` 或 `data/` 即**删除并大声告警**；
+   `npm run check:standalone`（`--strict`）用于 CI / 发布前门禁，发现泄漏则以非零码失败。
+2. **`Dockerfile` 运行阶段**：`rm -rf ./data ./spec ./deploy ./.env*` 后断言镜像内不存在任何数据库文件，否则构建失败（`FATAL: 镜像产物含数据库文件`）。
+
+**验证方式**：`npm run build` 后执行 `Get-ChildItem .next/standalone -Recurse -Include *.db*`（应无输出），并确认项目根 `data/fine-apihub.db` 的大小/修改时间**未被改动**（守卫只动产物里的副本）。
+
+
 ## 4. 响应头安全
 
 ### 全局安全头（`next.config.mjs::headers()`）
@@ -139,6 +161,7 @@ Expires: 0
 5. 将 `.db` 文件提交到版本控制
 6. 在日志中输出完整 `accessToken` / `apiKey` / `password`
 7. 暴露上游站点的内部 API 地址
+8. 让构建产物/镜像包含数据库或 `.env`（`data/` 下是凭证）——**不得移除** `tools/check-standalone.mjs` 或 `Dockerfile` 里的清库与断言步骤
 
 ## 7. 审计日志
 
