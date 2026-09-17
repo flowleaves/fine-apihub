@@ -48,6 +48,19 @@ npm run build && npm start        # 打开 http://127.0.0.1:3000，账号 admin 
 
 开发模式：`npm run dev`。对外暴露前请务必修改默认密码，并**建议置于 HTTPS 反代之后**（Cookie Secure 标记依赖 HTTPS）。
 
+### Windows 一键启动
+
+双击项目根目录的 **`start.bat`** 即可（自动完成：检查 Node 版本 → 安装依赖 → 初始化数据库 → 首次构建 → 启动并打开浏览器）。
+
+```bat
+start.bat                  :: 默认 3000 端口，已有构建产物就跳过重建
+start.bat --rebuild        :: 强制重新构建
+start.bat --port 3001      :: 换端口
+```
+
+> `start.bat` 刻意保持**纯 ASCII**：cmd.exe 按 OEM 代码页（简体中文为 936）解析 .bat，
+> 含中文的 UTF-8 批处理会被读坏导致脚本报错。中文说明就本节。
+
 数据库文件位置：
 - 默认：`data/fine-apihub.db`（项目根目录）
 - 自定义：`DB_PATH=/path/to/your.db`
