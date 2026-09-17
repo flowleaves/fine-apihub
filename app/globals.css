@@ -1,3 +1,9 @@
+/* ============================================================================
+   Claude 风基础样式
+   设计变量由 app/theme.ts 在运行时写入 :root（--cl-*），此处只做「结构与排版」。
+   规则：颜色一律走 var(--cl-*)，不写死色值，深浅色自动生效。
+   ========================================================================== */
+
 * {
   box-sizing: border-box;
 }
@@ -8,3 +14,137 @@ body {
   padding: 0;
   height: 100%;
 }
+
+body {
+  background: var(--cl-bg-layout, #faf9f5);
+  color: var(--cl-text, #1f1e1d);
+  font-family: var(--cl-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- 排版：标题走衬线体（Claude 的招牌观感），正文无衬线 ---- */
+.cl-display {
+  font-family: var(--cl-font-serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--cl-text);
+}
+.cl-display-xl { font-size: 34px; }
+.cl-display-lg { font-size: 26px; }
+.cl-display-md { font-size: 20px; }
+
+.cl-eyebrow {
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cl-text-tertiary);
+}
+
+.cl-muted { color: var(--cl-text-secondary); }
+.cl-faint { color: var(--cl-text-tertiary); }
+.cl-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ---- 卡片：靠极轻阴影 + 大圆角分层，不用重边框 ---- */
+.cl-card {
+  background: var(--cl-bg-container);
+  border: 1px solid var(--cl-border);
+  border-radius: var(--cl-radius-lg);
+  box-shadow: var(--cl-shadow);
+  padding: 20px;
+}
+.cl-card--flat { box-shadow: none; }
+.cl-card--pad-sm { padding: 14px 16px; }
+
+.cl-divider {
+  height: 1px;
+  background: var(--cl-border);
+  border: 0;
+  margin: 16px 0;
+}
+
+/* ---- 月历 ---- */
+.cl-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.cl-cal__dow {
+  text-align: center;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--cl-text-tertiary);
+  padding-bottom: 4px;
+}
+.cl-cal__cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--cl-radius);
+  border: 1px solid var(--cl-border);
+  background: var(--cl-bg-container);
+  padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: default;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+}
+.cl-cal__cell--pad { background: transparent; border-color: transparent; }
+.cl-cal__cell--today {
+  border-color: var(--cl-primary);
+  box-shadow: 0 0 0 1px var(--cl-primary) inset;
+}
+.cl-cal__cell--clickable:hover {
+  border-color: var(--cl-border-strong);
+  box-shadow: var(--cl-shadow);
+  cursor: pointer;
+}
+.cl-cal__date { font-size: 12px; color: var(--cl-text-secondary); }
+.cl-cal__cell--today .cl-cal__date { color: var(--cl-primary); font-weight: 600; }
+.cl-cal__cost {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--cl-text);
+}
+.cl-cal__cost--zero { color: var(--cl-text-tertiary); font-weight: 400; }
+.cl-cal__meta { font-size: 10.5px; color: var(--cl-text-tertiary); }
+/* 热度底：色深表示当天花费高低（用主色 + 透明度，不额外引入色值） */
+.cl-cal__heat {
+  position: absolute;
+  inset: 0;
+  background: var(--cl-primary);
+  opacity: 0;
+  pointer-events: none;
+}
+.cl-cal__cell > *:not(.cl-cal__heat) { position: relative; z-index: 1; }
+
+/* ---- 迷你条（今天逐小时）---- */
+.cl-bars { display: flex; align-items: flex-end; gap: 3px; height: 64px; }
+.cl-bars__bar {
+  flex: 1;
+  min-height: 2px;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--cl-primary);
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+.cl-bars__bar:hover { opacity: 1; }
+.cl-bars__bar--empty { background: var(--cl-bg-subtle); opacity: 1; }
+
+/* ---- 滚动条：与暖色主题协调 ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--cl-border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--cl-border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track { background: transparent; }

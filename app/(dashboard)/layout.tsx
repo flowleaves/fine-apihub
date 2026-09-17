@@ -11,6 +11,7 @@ import {
   LineChartOutlined,
   BarChartOutlined,
   FundOutlined,
+  CalendarOutlined,
   BellOutlined,
   SettingOutlined,
   ReloadOutlined,
@@ -27,6 +28,7 @@ const menuRoute = {
   path: "/",
   routes: [
     { path: "/", name: "总览", icon: <AppstoreOutlined /> },
+    { path: "/calendar", name: "消耗月历", icon: <CalendarOutlined /> },
     { path: "/stations", name: "中转站", icon: <ClusterOutlined /> },
     { path: "/my", name: "我的站点", icon: <LineChartOutlined /> },
     { path: "/usage", name: "用量统计", icon: <BarChartOutlined /> },
