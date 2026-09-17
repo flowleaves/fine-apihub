@@ -143,6 +143,10 @@ refreshAll(rt, { scope })
   │      ├──► 成功时 rt.history.append(station.id, remaining, used)
   │      │      内存追加 + 攒批 1.5s 后写透 SQLite（→ history_points）
   │      │
+  │      ├──► sampleUsageIfDue(rt, station) → 写透 usage_points
+  │      │      每站**每小时最多 1 次**上游用量请求（自带节流），只写「当天」一行（幂等 upsert）；
+  │      │      失败只记录不写 0 —— 缺失=未采样，不等于没花钱
+  │      │
   │      ├──► lib/alerts.js::evaluateStation() → 状态迁移 + 通知触发
   │      │      │
   │      │      ├──► stateOf() → ok / warn / danger / error
@@ -178,6 +182,7 @@ refreshAll(rt, { scope })
 | `db/pool.js` | 驱动抽象、方言翻译、建表 | 新 SQL 必须兼容 MySQL 语法（SQLite 侧翻译），或反向翻译 |
 | `db/store.js` | 站点/设置/通知的内存缓存 + 写透 | `save()` 必须串行化；`_writeNow()` 用事务 |
 | `db/history.js` | 余额历史内存缓存 + 攒批写透 | `MAX_POINTS` / `MAX_AGE_MS` 不可随意改 |
+| `db/usage.js` | 每日用量落库（`usage_points`） | upsert 用 MySQL 写法由 `db/pool.js` 转写，不要改成 SQLite 专有语法 |
 | `lib/runtime.js` | 运行时单例初始化 | 生产失败必须 `process.exit(1)` |
 | `lib/providers.js` | 上游站点适配器 | `QUOTA_PER_UNIT = 500000` 是唯一换算常量 |
 | `lib/alerts.js` | 告警状态迁移 + 通知触发 | 不靠定时轰炸，靠状态迁移 |

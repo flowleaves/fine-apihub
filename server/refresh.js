@@ -1,8 +1,52 @@
 // 后台余额刷新循环：查询→写余额→记历史→告警评估→失败快速重试 + 定时轮询节拍。
 // 平移自 v1 server.js（refreshOne/doRefreshOne/scheduleErrorRetry/refreshAll/restartPolling），
 // 全局 store/history → rt.store/rt.history，模块级状态改挂 rt 字段（多实例/HMR 安全）。
-import { queryStation } from "../lib/providers.js";
+import { queryStation, queryStationUsage, dateStrInTz, parseDateLabel } from "../lib/providers.js";
 import { evaluateStation } from "../lib/alerts.js";
+import { upsertUsagePoint, pruneUsage, USAGE_MAX_AGE_DAYS } from "../db/usage.js";
+import { REPORT_TIME_ZONE } from "./report.js";
+
+// 每日用量落库的采样间隔：每站每小时最多采一次（每次 = 1 个上游请求）
+const USAGE_SAMPLE_INTERVAL_SEC = 3600;
+
+/**
+ * 把「当天的用量/花费」落库（幂等 upsert 到 usage_points）。
+ * 自带小时级节流：余额每 10 分钟刷一次，但用量采样每小时才发 1 次请求。
+ * 失败只记录、绝不影响余额刷新与告警。
+ */
+export async function sampleUsageIfDue(rt, station, { now = Date.now(), force = false } = {}) {
+  if (station.type === "fixed") return { sampled: false, reason: "固定成本站点不产生用量" };
+  const map = (rt._usageSampledAt ||= new Map());
+  const last = map.get(station.id) || 0;
+  if (!force && now - last < USAGE_SAMPLE_INTERVAL_SEC * 1000) {
+    return { sampled: false, reason: "未到采样间隔", nextInSec: Math.ceil((USAGE_SAMPLE_INTERVAL_SEC * 1000 - (now - last)) / 1000) };
+  }
+  const tz = REPORT_TIME_ZONE;
+  const today = dateStrInTz(now, tz);
+  const startMs = parseDateLabel(today, tz);
+  try {
+    const u = await queryStationUsage(station, {
+      startMs, endMs: startMs + 86400000, granularity: "day", tz, wantToday: true,
+    });
+    const sum = (f) => (u.summary ? u.summary[f] : u.models.reduce((a, m) => a + m[f], 0));
+    const costUsd = Math.round(sum("cost") * 10000) / 10000;
+    await upsertUsagePoint(rt.pool, {
+      stationId: station.id, date: today,
+      costUsd, tokens: sum("tokens"), requests: sum("requests"),
+      source: u.modelsWindow || "usage-api",
+    });
+    map.set(station.id, now);
+    // 顺手裁剪（每天最多跑一次）
+    if (!rt._usagePrunedAt || now - rt._usagePrunedAt > 86400000) {
+      rt._usagePrunedAt = now;
+      await pruneUsage(rt.pool, dateStrInTz(now - USAGE_MAX_AGE_DAYS * 86400000, tz)).catch(() => {});
+    }
+    return { sampled: true, date: today, costUsd };
+  } catch (err) {
+    // 采样失败下一轮再试；不写 0，避免把「失败」记成「没花钱」
+    return { sampled: false, reason: err?.message || String(err) };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 余额刷新 + 历史 + 告警
@@ -63,6 +107,8 @@ async function doRefreshOne(rt, station) {
   }
 
   await rt.store.save(); // balance / s2Tokens / alertState 一并落盘
+  // 顺带把「今天的用量/花费」落库（自带小时级节流，内部已吞异常，不影响主流程）
+  await sampleUsageIfDue(rt, station);
   scheduleErrorRetry(rt, station); // 失败未达阈值则安排一次快速重试
   return result;
 }

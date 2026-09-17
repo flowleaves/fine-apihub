@@ -30,6 +30,25 @@
 - SQLite 没有原生 JSON 列，以 TEXT 存储；读取时 `JSON.parse()`。
 - `session_secret` 的值可能被 SQLite 以 JSON 字符串形式存储（带引号），读取时需做一次 `typeof v === "string" && v.startsWith('"') ? JSON.parse(v) : v` 的兼容处理。
 
+### `usage_points` — 每日用量关系行（2026-09-17 新增）
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| `station_id` | `TEXT` | NOT NULL, PK(1) | 站点 id |
+| `date` | `TEXT` | NOT NULL, PK(2) | 自然日 `YYYY-MM-DD`（按 `REPORT_TIME_ZONE` 切日） |
+| `cost_usd` | `REAL` | NOT NULL DEFAULT 0 | 当天花费（美元，上游口径） |
+| `tokens` | `REAL` | NOT NULL DEFAULT 0 | 当天 tokens |
+| `requests` | `REAL` | NOT NULL DEFAULT 0 | 当天请求数 |
+| `source` | `TEXT` | NOT NULL DEFAULT '' | 口径来源（如 `exact` / `hour` / `30d-or-provider-default`） |
+| `updated_at` | `TEXT` | NOT NULL DEFAULT '' | 最近一次采样时间（ISO 8601） |
+
+**设计说明**：
+- **为什么落库**：上游用量接口保留期很短（实测 new-api 约 20 天、Sub2API 约 23~30 天），且 Sub2API 只返回「有数据」的日期；落库后历史不再受上游窗口限制，上游故障也能回看。
+- **写入**：`server/refresh.js::sampleUsageIfDue()` 在每轮余额刷新后调用，**每站每小时最多 1 次**上游请求，只写「当天」这一行；`(station_id, date)` 复合主键 + upsert 保证幂等（当天累计值增长时覆盖）。
+- **缺失语义**：某天没有行 = **未采样**（面板没开/上游查询失败），**不等于花费为 0**。响应里的 `note` 会如实说明。
+- **保留**：`db/usage.js::USAGE_MAX_AGE_DAYS = 400` 天，每天最多裁剪一次。
+- 索引：`idx_usage_date (date)`，供按区间读取。
+
 ### `history_points` — 余额历史关系行
 
 | 列 | 类型 | 约束 | 说明 |

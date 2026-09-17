@@ -199,6 +199,7 @@ export async function ensureSchema(pool) {
     await pool.query(`CREATE TABLE IF NOT EXISTS stations (id VARCHAR(191) PRIMARY KEY, pos INT NOT NULL DEFAULT 0, doc JSON NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     await pool.query(`CREATE TABLE IF NOT EXISTS meta (k VARCHAR(191) PRIMARY KEY, v JSON NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
     await pool.query(`CREATE TABLE IF NOT EXISTS history_points (station_id VARCHAR(191) NOT NULL, t BIGINT NOT NULL, remaining DOUBLE NOT NULL, used DOUBLE NOT NULL DEFAULT 0, PRIMARY KEY (station_id,t), INDEX idx_history_t (t))`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS usage_points (station_id VARCHAR(191) NOT NULL, date CHAR(10) NOT NULL, cost_usd DOUBLE NOT NULL DEFAULT 0, tokens DOUBLE NOT NULL DEFAULT 0, requests DOUBLE NOT NULL DEFAULT 0, source VARCHAR(64) NOT NULL DEFAULT '', updated_at VARCHAR(32) NOT NULL DEFAULT '', PRIMARY KEY (station_id,date))`);
     return;
   }
   const db = getDb();
@@ -223,6 +224,19 @@ export async function ensureSchema(pool) {
     PRIMARY KEY (station_id, t)
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_history_t ON history_points (t)`);
+  // 每日用量（花费/tokens/请求）：把上游「按日花费」落库，摆脱上游保留期限制
+  //（实测 new-api 约 20 天、Sub2API 约 23~30 天）。每站每天 1 行，幂等 upsert。
+  db.exec(`CREATE TABLE IF NOT EXISTS usage_points (
+    station_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    tokens REAL NOT NULL DEFAULT 0,
+    requests REAL NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (station_id, date)
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_date ON usage_points (date)`);
 }
 
 /**

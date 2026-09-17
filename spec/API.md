@@ -292,6 +292,32 @@ Expires: 0
 
 **缓存**：同 `(range, tz)` 组合缓存 60 秒。
 
+### `GET /api/usage/daily?days={n}&stationId={id}`
+
+读取**本地落库**的每日用量（`usage_points` 表），**不受上游保留期限制**。
+
+**参数**：
+- `days`：回溯天数，默认 90，范围 1~400
+- `stationId`：可选，只查单个站点；缺省查所有**仍存在**的站点
+
+**响应**：
+```json
+{
+  "days": 90, "from": "2026-06-20", "to": "2026-09-17", "tz": "Asia/Shanghai",
+  "maxDays": 400,
+  "note": "本地采样数据（每站每小时一次，只写当天）。…缺失=未采样，不代表花费为 0。",
+  "rows": [{ "stationId": "st_abc", "date": "2026-09-17", "costUsd": 36.24, "tokens": 314294398, "requests": 4790, "source": "exact" }],
+  "stations": [{ "id": "st_abc", "name": "…", "type": "newapi", "isOwn": true, "cnyPerUsd": 7.2, "costUsd": 366.15, "costCny": 2636.28, "tokens": 0, "requests": 0, "days": 17 }],
+  "daily": [{ "date": "2026-09-17", "costUsd": 36.24, "costCny": 260.93 }],
+  "generatedAt": "2026-09-17T12:30:00.000Z"
+}
+```
+
+**口径**：与 `/api/usage`（实时问上游）不同，本接口读本地采样历史。数据由刷新流程
+`server/refresh.js::sampleUsageIfDue()` 每小时采样一次「当天」累积写入，因此：
+- 面板未运行 / 采样失败的日期**没有行**（缺失 ≠ 花费 0）
+- 启用落库之前的历史不存在，需要更早数据只能靠时间累积
+
 ---
 
 ## 6. 「我的站点」下游分析

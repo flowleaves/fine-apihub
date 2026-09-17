@@ -30,6 +30,7 @@
 | `lib/runtime.js` | 运行时单例 `globalThis.__FA_RT` | 生产初始化失败必须 `process.exit(1)` |
 | `db/pool.js` | 驱动抽象 + 方言翻译 + 建表 | 新 SQL 必须**同时兼容** SQLite + MySQL |
 | `db/store.js` / `db/history.js` | 内存缓存 + 写透 | `save()` 必须串行化；`MAX_POINTS` / `MAX_AGE_MS` 不可随意改 |
+| `db/usage.js` | 每日用量落库（`usage_points`） | upsert 保留 MySQL 写法（由 `pool.js` 转写）；缺失=未采样，禁止写 0 冒充 |
 | `server/refresh.js` | 后台刷新循环 | `refreshStation` 同站去重**必须保留** |
 | `server/report.js` | 每日日报调度 | 按 `REPORT_TIME_ZONE`（默认北京时间） |
 | `server/stations.js` | `redact()` 统一脱敏 | 所有下发前必过 |
@@ -68,6 +69,8 @@ npm run db:backup   # 一致性在线备份（WAL 下别直接 cp .db）→ data
   启动首刷 / 手动 `POST /api/refresh` / `PUT /api/settings` 始终是 `scope:"all"` 全量。详见 `spec/ARCHITECTURE.md` §3.1。
   ⚠️ 代价：自有站不参与常规轮询 → 它的余额告警最长延迟一个节流周期；要恢复把 `ownRefreshIntervalSec` 设 0。
 - **数据库**：默认 SQLite `data/fine-apihub.db`（WAL 模式，`node:sqlite` 内置模块）；`DB_DRIVER=mysql` 切 MySQL。
+  三张业务表：`stations` / `meta` / `history_points`（余额快照，每次刷新落库）+ `usage_points`（每日用量，**每站每小时采样一次**）。
+  PostgreSQL 暂不引入（评估过：本量级 SQLite 完全够，且单文件即备份是设计取向）；驱动层已抽象为 `pool.query(sql, params)`，将来可加第三驱动。
   一致性备份用 `db/pool.js::backupTo()`，**不要**在 WAL 下直接复制 `.db`。
 - **默认账号**：`admin` / `admin123`（首次登录 `isDefaultPassword: true`），对外暴露前必须改。
 - 测试文件与被测模块同目录（`lib/providers.test.js` 等），新增核心逻辑请补 `node --test` 用例。
