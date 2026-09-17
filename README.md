@@ -52,7 +52,14 @@ npm run build && npm start        # 打开 http://127.0.0.1:3000，账号 admin 
 - 默认：`data/fine-apihub.db`（项目根目录）
 - 自定义：`DB_PATH=/path/to/your.db`
 
-**备份**：直接复制 `.db` 文件即可（WAL 模式下建议使用 SQLite 的 `backup()` API 保证一致性）。
+**备份**：推荐用内置的一致性备份命令（WAL 模式下直接复制 `.db` 可能拿到不完整状态）：
+
+```bash
+npm run db:backup                      # → data/fine-apihub-backup-<时间戳>.db
+npm run db:backup -- /path/to/out.db   # 指定目标路径
+```
+
+若服务已停止（WAL 已 checkpoint），也可直接复制 `data/fine-apihub.db`。
 
 ## 从 v1 迁移
 

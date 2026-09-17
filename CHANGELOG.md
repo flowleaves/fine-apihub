@@ -13,6 +13,9 @@ All notable changes to this project are documented in this file.
 - `package.json` 版本号 `2.2.0` → `2.3.1`（与 CHANGELOG 对齐）；`description` 补品牌前缀；新增 `author: "fine"`
 
 ### Chore
+- **新增 `npm run db:backup`**（`db/backup.js`）：把 `db/pool.js::backupTo()` 的一致在线备份能力接出 CLI
+  - 此前该 API 被 README / `spec/DATA-MODEL.md` 推荐为「WAL 模式下的正确备份方式」，但**没有任何入口能调用**（死代码）
+  - 默认输出 `data/fine-apihub-backup-<UTC 时间戳>.db`，支持指定路径；`DB_DRIVER=mysql` 时拒绝执行（改用 `mysqldump`）
 - **品牌统一为 `fine`**：界面标题 / 登录页 / 侧边栏 / 关于页 / 页面 metadata / PWA manifest / 日报邮件页脚 / 测试通知 / Bark 分组 / Webhook `source` / 启动横幅 / `package.json` description，全部由 `FINE-APIHUB` 改为 `fine`
   - 保留的技术标识符（非展示品牌，改动无收益且有副作用）：`data/fine-apihub.db`（库文件名）、`ghcr.io/flowleaves/fine-apihub`（镜像/仓库名）、`package.json.name`、Service Worker 缓存名、SMTP `EHLO`/`Message-ID` 域标签
 - **`LICENSE` 版权归属改为 `Copyright (c) 2026 fine`**

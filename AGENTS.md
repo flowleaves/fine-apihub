@@ -53,6 +53,7 @@ npm run build       # → standalone 产物（末尾自动跑 check-standalone �
 npm run build:webpack          # 同上，但用 webpack 构建（standalone 更精简）
 npm run check:standalone       # 守卫 strict 模式：产物含 *.db/.env 即失败（CI 门禁）
 npm run db:migrate  # 幂等；库非空即跳过
+npm run db:backup   # 一致性在线备份（WAL 下别直接 cp .db）→ data/fine-apihub-backup-<时间戳>.db
 ```
 
 > 🔴 **不要移除构建守卫**：`next build` 会把 `data/`（真实凭证库）拷进 `.next/standalone`，而 Dockerfile 正是拷它。

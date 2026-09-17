@@ -225,7 +225,14 @@ append() 触发
 
 ## 5. 备份与恢复
 
-### 一致性备份（`db/pool.js::backupTo()`）
+### 一致性备份（`db/pool.js::backupTo()`，CLI：`npm run db:backup`）
+
+```bash
+npm run db:backup                      # → data/fine-apihub-backup-<时间戳>.db
+npm run db:backup -- /backup/fine-apihub-20260914.db   # 指定目标
+```
+
+等价的编程调用：
 
 ```javascript
 import { backupTo } from "./db/pool.js";
@@ -233,7 +240,7 @@ await backupTo("/backup/fine-apihub-20260914.db");
 ```
 
 - WAL 模式下直接复制 `.db` 文件可能拿到不完整状态，必须使用 SQLite 官方 online backup API。
-- 备份时读写可正常进行，不阻塞业务。
+- 备份时读写可正常进行，不阻塞业务。`DB_DRIVER=mysql` 时该命令会拒绝执行（MySQL 请用 `mysqldump`）。
 
 ### 手动备份（文件级）
 
