@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageContainer } from "@ant-design/pro-components";
 import { Button, Segmented, Skeleton, Space, Tag, Tooltip, Typography, theme } from "antd";
 import { LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
-import { api, cny, usd } from "../../../lib/client";
+import { api, cny, fmtTokens } from "../../../lib/client";
 
 const { Text } = Typography;
 
@@ -27,6 +27,28 @@ type CalPayload = {
 const DOW = ["日", "一", "二", "三", "四", "五", "六"];
 
 const money = (v: number) => `$${Number(v || 0).toFixed(2)}`;
+
+// 较昨日：null = 不可比（缺今日或缺昨日）
+function vsPrev(cur?: number, prev?: number) {
+  if (cur == null || prev == null) return null;
+  if (!(prev > 0)) return cur > 0 ? { dir: "up" as const, pct: null } : { dir: "flat" as const, pct: 0 };
+  const pct = ((cur - prev) / prev) * 100;
+  const dir = Math.abs(pct) < 0.05 ? ("flat" as const) : pct > 0 ? ("up" as const) : ("down" as const);
+  return { dir, pct };
+}
+
+// 箭头 + 百分比：花费上升用暖红（需注意），下降用绿
+function DeltaTag({ cur, prev, size = 11 }: { cur?: number; prev?: number; size?: number }) {
+  const d = vsPrev(cur, prev);
+  if (!d) return null;
+  const arrow = d.dir === "up" ? "▲" : d.dir === "down" ? "▼" : "—";
+  const text = d.pct == null ? "新增" : `${Math.abs(d.pct).toFixed(1)}%`;
+  return (
+    <span className={`cl-delta--${d.dir}`} style={{ fontSize: size, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+      {arrow} {text}
+    </span>
+  );
+}
 
 // "2026-09" 的前后月
 function shiftMonth(month: string, delta: number) {
@@ -70,6 +92,21 @@ export default function CalendarPage() {
     for (const d of data?.daily || []) m.set(d.date, d);
     return m;
   }, [data]);
+
+  // 前一天（自然日）的日期串，用于「较昨日」
+  const prevDate = useCallback((date: string) => {
+    const [y, m, d] = date.split("-").map(Number);
+    const t = Date.UTC(y, m - 1, d - 1);
+    const dt = new Date(t);
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+  }, []);
+
+  // 今日较昨日（同日整日对比）
+  const todayDelta = useMemo(() => {
+    const cur = data?.today?.usd;
+    const prev = data?.today ? byDate.get(prevDate(data.today.date))?.usd : undefined;
+    return { cur, prev };
+  }, [data, byDate, prevDate]);
 
   const maxUsd = useMemo(
     () => Math.max(1e-9, ...[...(data?.daily || [])].map((d) => d.usd)),
@@ -134,31 +171,39 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ---- 顶部三个数：本月合计 / 今日实时 / 覆盖范围 ---- */}
+      {/* ---- 顶部三个数：本月合计 / 今日实时 / 覆盖范围 ----
+           三张卡用同一套三行节奏（cl-kpi），数值落在同一基线，避免「字没对齐」 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <div className="cl-card">
+        <div className="cl-card cl-kpi">
           <div className="cl-eyebrow">本月合计（已返回 {monthDays} 天）</div>
-          <div className="cl-display cl-display-lg cl-num" style={{ marginTop: 6 }}>{money(monthTotal)}</div>
+          <div className="cl-display cl-display-lg cl-num">{money(monthTotal)}</div>
           <Text type="secondary" style={{ fontSize: 12 }}>
             日均 {monthDays ? money(monthTotal / monthDays) : "—"}
           </Text>
         </div>
-        <div className="cl-card">
+        <div className="cl-card cl-kpi">
           <div className="cl-eyebrow">今日实时消耗</div>
-          <div className="cl-display cl-display-lg cl-num" style={{ marginTop: 6, color: "var(--cl-primary)" }}>
-            {money(data?.today?.usd || 0)}
+          <div className="cl-kpi__value">
+            <span className="cl-display cl-display-lg cl-num" style={{ color: "var(--cl-primary)" }}>
+              {data?.today ? money(data.today.usd) : "—"}
+            </span>
+            <DeltaTag cur={todayDelta.cur} prev={todayDelta.prev} size={12} />
           </div>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {data?.today ? `${(data.today.tokens || 0).toLocaleString("en-US")} tokens · ${(data.today.requests || 0).toLocaleString("en-US")} 次请求` : "今日暂无数据"}
+            {data?.today
+              ? `${fmtTokens(data.today.tokens)} tokens · ${data.today.requests.toLocaleString("en-US")} 次请求`
+              : "今日暂无数据"}
+            {todayDelta.prev != null && ` · 昨日 ${money(todayDelta.prev)}`}
           </Text>
         </div>
-        <div className="cl-card">
+        <div className="cl-card cl-kpi">
           <div className="cl-eyebrow">口径与覆盖</div>
-          <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--cl-text-secondary)", lineHeight: 1.7 }}>
-            最早可查 <b className="cl-num">{data?.coverageFrom || "—"}</b>
-            <br />
-            上游保留期有限，更早日期<b>留空</b>而非记 0
+          <div className="cl-num cl-display cl-display-md" style={{ fontSize: 18 }}>
+            {data?.coverageFrom || "—"}
           </div>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            上游保留期有限，更早日期<b>留空</b>而非记 0
+          </Text>
         </div>
       </div>
 
@@ -179,6 +224,7 @@ export default function CalendarPage() {
                   const isToday = date === data?.todayLabel;
                   const isFuture = data ? date > data.todayLabel : false;
                   const ratio = rec ? rec.usd / maxUsd : 0;
+                  const prevUsd = byDate.get(prevDate(date))?.usd;
                   return (
                     <div
                       key={date}
@@ -188,44 +234,67 @@ export default function CalendarPage() {
                         rec ? "cl-cal__cell--clickable" : "",
                       ].join(" ")}
                       onClick={() => rec && setPicked(date === picked ? null : date)}
-                      title={rec ? `${date}\n$${rec.usd.toFixed(2)} · ${rec.tokens.toLocaleString("en-US")} tokens · ${rec.requests} 次` : `${date}（无数据）`}
+                      title={rec ? `${date}\n${money(rec.usd)} · ${rec.tokens.toLocaleString("en-US")} tokens · ${rec.requests} 次` : `${date}（无数据）`}
                     >
                       {/* 热度底：色深 ∝ 当天花费 */}
                       <div className="cl-cal__heat" style={{ opacity: rec ? Math.min(0.14, ratio * 0.14) : 0 }} />
                       <div className="cl-cal__date">{Number(date.slice(8, 10))}</div>
-                      {rec ? (
-                        <>
-                          <div className="cl-cal__cost cl-num">{money(rec.usd)}</div>
-                          <div className="cl-cal__meta cl-num">{rec.requests} 次</div>
-                        </>
-                      ) : (
-                        <div className="cl-cal__cost cl-cal__cost--zero">{isFuture ? "" : "—"}</div>
-                      )}
+                      {/* 中间行：花费 + 较昨日（有无数据都占位，保证各格对齐） */}
+                      <div className="cl-cal__cost-wrap">
+                        {rec ? (
+                          <>
+                            <span className="cl-cal__cost">{money(rec.usd)}</span>
+                            <DeltaTag cur={rec.usd} prev={prevUsd} size={9.5} />
+                          </>
+                        ) : (
+                          <span className="cl-cal__cost cl-cal__cost--zero">{isFuture ? "" : "—"}</span>
+                        )}
+                      </div>
+                      <div className="cl-cal__meta">
+                        {rec ? `${fmtTokens(rec.tokens)} tok` : "\u00A0"}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              {picked && (
-                <div style={{ marginTop: 16 }}>
-                  <hr className="cl-divider" />
-                  <div className="cl-eyebrow" style={{ marginBottom: 8 }}>{picked} · 分站明细</div>
-                  {pickedStations.length ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {pickedStations.map(({ s, d }) => (
-                        <div key={s.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
-                          <span>
-                            {s.name}{" "}
-                            <Tag style={{ marginLeft: 4 }}>{s.type}</Tag>
-                          </span>
-                          <span className="cl-num" style={{ fontWeight: 600 }}>{money(d!.usd)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <Text type="secondary" style={{ fontSize: 12.5 }}>该日上游无返回数据</Text>
-                  )}
-                </div>
-              )}
+              {picked && (() => {
+                const day = byDate.get(picked);
+                const prevUsd = byDate.get(prevDate(picked))?.usd;
+                return (
+                  <div style={{ marginTop: 16 }}>
+                    <hr className="cl-divider" />
+                    <div className="cl-eyebrow" style={{ marginBottom: 8 }}>{picked} · 分站明细</div>
+                    {day && (
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                        <span className="cl-num cl-display cl-display-md">{money(day.usd)}</span>
+                        <DeltaTag cur={day.usd} prev={prevUsd} size={12} />
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {fmtTokens(day.tokens)} tokens · {day.requests.toLocaleString("en-US")} 次请求
+                          {prevUsd != null && ` · 昨日 ${money(prevUsd)}`}
+                        </Text>
+                      </div>
+                    )}
+                    {pickedStations.length ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {pickedStations.map(({ s, d }) => (
+                          <div key={s.id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                              <Tag style={{ marginInlineEnd: 0 }}>{s.type}</Tag>
+                            </span>
+                            <span style={{ display: "flex", alignItems: "baseline", gap: 10, whiteSpace: "nowrap" }}>
+                              <span className="cl-faint cl-num" style={{ fontSize: 11.5 }}>{fmtTokens(d!.tokens)} tok</span>
+                              <span className="cl-num" style={{ fontWeight: 600, minWidth: 74, textAlign: "right" }}>{money(d!.usd)}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <Text type="secondary" style={{ fontSize: 12.5 }}>该日上游无返回数据</Text>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
@@ -234,8 +303,9 @@ export default function CalendarPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div className="cl-card">
             <div className="cl-eyebrow">今日逐小时（实时）</div>
-            <div className="cl-display cl-display-md cl-num" style={{ margin: "6px 0 2px" }}>
-              {money(data?.today?.usd || 0)}
+            <div className="cl-kpi__value" style={{ margin: "6px 0 2px" }}>
+              <span className="cl-display cl-display-md cl-num">{data?.today ? money(data.today.usd) : "—"}</span>
+              <DeltaTag cur={todayDelta.cur} prev={todayDelta.prev} size={12} />
             </div>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {data?.hours?.length ? `已记录 ${data.hours.length} 个小时点` : "今天还没有小时数据"}
@@ -255,10 +325,13 @@ export default function CalendarPage() {
                 );
               })}
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-              <span className="cl-faint" style={{ fontSize: 10.5 }}>00:00</span>
-              <span className="cl-faint" style={{ fontSize: 10.5 }}>12:00</span>
-              <span className="cl-faint" style={{ fontSize: 10.5 }}>23:00</span>
+            {/* 刻度与柱子同栅格（同为 24 列 + 同 gap），标签才会对准柱位 */}
+            <div className="cl-bars-axis">
+              {Array.from({ length: 24 }, (_, h) => (
+                <span key={h} className="cl-bars-axis__tick">
+                  {h === 0 ? "0" : h === 6 ? "6" : h === 12 ? "12" : h === 18 ? "18" : h === 23 ? "23" : ""}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -275,11 +348,12 @@ export default function CalendarPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {(data?.stations || []).map((s) => (
                 <div key={s.id}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, fontSize: 13 }}>
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.name}
                     </span>
-                    <span className="cl-num" style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {/* 金额列固定宽度 + 右对齐 + 等宽数字，多行才能对齐成列 */}
+                    <span className="cl-num" style={{ fontWeight: 600, whiteSpace: "nowrap", minWidth: 84, textAlign: "right" }}>
                       {s.ok && s.available ? (metric === "usd" ? money(s.totalUsd) : cny(s.totalCny)) : "—"}
                     </span>
                   </div>
@@ -288,9 +362,10 @@ export default function CalendarPage() {
                       {s.error || s.reason || "不可用"}
                     </Text>
                   )}
-                  {s.ok && s.available && s.coverageFrom && (
-                    <div className="cl-faint" style={{ fontSize: 11 }}>
-                      可查自 {s.coverageFrom}
+                  {s.ok && s.available && (
+                    <div className="cl-faint" style={{ fontSize: 11, display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span>{s.coverageFrom ? `可查自 ${s.coverageFrom}` : "无可查日期"}</span>
+                      <span className="cl-num">今日 {money(s.todayUsd)}</span>
                     </div>
                   )}
                 </div>
