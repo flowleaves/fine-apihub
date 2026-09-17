@@ -26,8 +26,23 @@ export const GET = withAuth(async (request, rt) => {
   const cache = ownCache(rt);
   const cacheKey = `${range}|${tz}`;
   const hit = cache.get(cacheKey);
-  // ownFresh 是「本次请求有没有触发自有站刷新 / 下次最早何时可刷」，不随 120s 分析缓存走
-  if (hit && Date.now() - hit.at < 120000) return json({ ...hit.payload, ownFresh: fresh });
+  // 「分析结果」的缓存窗口 = 自有站节流窗口：
+  // 自有站是生产站，一次分析要打它 5+ 个接口；页面 30s 轮询不应把这份开销放大。
+  // ownRefreshIntervalSec=0（不节流）时退回 120s 兜底，避免每次轮询都重算。
+  const ownSec = Number(rt.store.settings.ownRefreshIntervalSec);
+  const ttlSec = Number.isFinite(ownSec) && ownSec > 0 ? ownSec : 120;
+  const ttlMs = ttlSec * 1000;
+  // ownFresh 是「本次请求有没有触发自有站刷新 / 下次最早何时可刷」，不随分析缓存走
+  if (hit && Date.now() - hit.at < ttlMs) {
+    return json({
+      ...hit.payload,
+      ownFresh: fresh,
+      cacheTtlSec: ttlSec,
+      cached: true,
+      cacheAgeSec: Math.floor((Date.now() - hit.at) / 1000),
+      nextRefreshInSec: Math.max(0, Math.ceil((ttlMs - (Date.now() - hit.at)) / 1000)),
+    });
+  }
 
   try {
     // 模型行一次拉 35 天（窗口展示 + 日消费预测共用）；用户行只拉展示窗口。
@@ -161,7 +176,7 @@ export const GET = withAuth(async (request, rt) => {
       generatedAt: new Date().toISOString(),
     };
     cache.set(cacheKey, { at: Date.now(), payload });
-    return json({ ...payload, ownFresh: fresh });
+    return json({ ...payload, ownFresh: fresh, cacheTtlSec: ttlSec, cached: false, cacheAgeSec: 0, nextRefreshInSec: ttlSec });
   } catch (err) {
     return json({ error: err?.message || String(err) }, 502);
   }

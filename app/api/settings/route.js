@@ -17,6 +17,7 @@ export const PUT = withAuth(async (request, rt) => {
   if (body?.dailyReport && typeof body.dailyReport === "object")
     patch.dailyReport = body.dailyReport; // store 内部做字段校验合并
   const settings = await rt.store.updateSettings(patch);
+  rt._ownCache?.clear(); // 节流窗口可能变了，让下次分析按新 TTL 重算
   restartPolling(rt);
   // 立即刷新一轮：重置定时器后第一次触发要等满整个周期，不主动刷会显得设置没生效
   await refreshAll(rt, { scope: "all" });

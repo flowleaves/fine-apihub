@@ -361,8 +361,9 @@ Expires: 0
 }
 ```
 
-**缓存**：同 `(range, tz)` 组合缓存 120 秒。
-**副作用**：调用时会触发 `ensureOwnFresh()` —— 即「我的站点 / 经营分析」页面在使用中时，按 `settings.ownRefreshIntervalSec`（默认 1 小时）节流刷新自有站余额/历史；响应里的 `ownFresh` 字段回显本次是否真的刷新了（`{refreshed, nextInSec, lastAt}`）。
+**缓存**：缓存窗口 = `settings.ownRefreshIntervalSec`（默认 3600 秒；`0` 时退回 120 秒兜底）。
+即「我的站点」页 30 秒轮询不会反复重算上游；响应带 `cached / cacheAgeSec / cacheTtlSec / nextRefreshInSec` 便于界面标注「数据何时再更新」。
+**副作用**：调用时会触发 `ensureOwnFresh()` —— 即「我的站点 / 经营分析」页面在使用中时，按同一节流窗口刷新自有站余额/历史；响应里的 `ownFresh` 字段回显本次是否真的刷新了（`{refreshed, nextInSec, lastAt}`）。
 
 ### `GET /api/own/audit`
 
