@@ -1,16 +1,24 @@
 # Changelog
 
-All notable changes from the upstream `lettimepassby/relay-monitor` project are documented in this file.
+All notable changes to this project are documented in this file.
 
 ## [2.3.1] - 2026-09-14 - 品牌标识符收尾
 
 ### Branding
-- 清理代码内残留的 relay 系标识符（项目已更名为 `fine-apihub`，仓库 `flowleaves/fine-apihub`）：
+- 清理代码内历史标识符（项目已更名为 `fine-apihub`，仓库 `flowleaves/fine-apihub`）：
   - 会话 Cookie 名 `rm_session` → `fa_session`
     - `lib/auth.js` 改为导出 `COOKIE_NAME`，`lib/api.js` 复用该常量，消除两处硬编码重复
   - 运行时单例 `globalThis.__RELAY_RT` → `globalThis.__FA_RT`（`lib/runtime.js`）
-  - 通知渠道示例发件人 `Relay Monitor` → `FINE-APIHUB`（`lib/notify.js`，2 处）
-- `package.json` 版本号 `2.2.0` → `2.3.1`（与 CHANGELOG 对齐）；`description` 补品牌前缀
+  - 通知渠道示例发件人标签统一为 `fine`（`lib/notify.js`，2 处）
+- `package.json` 版本号 `2.2.0` → `2.3.1`（与 CHANGELOG 对齐）；`description` 补品牌前缀；新增 `author: "fine"`
+
+### Chore
+- **品牌统一为 `fine`**：界面标题 / 登录页 / 侧边栏 / 关于页 / 页面 metadata / PWA manifest / 日报邮件页脚 / 测试通知 / Bark 分组 / Webhook `source` / 启动横幅 / `package.json` description，全部由 `FINE-APIHUB` 改为 `fine`
+  - 保留的技术标识符（非展示品牌，改动无收益且有副作用）：`data/fine-apihub.db`（库文件名）、`ghcr.io/flowleaves/fine-apihub`（镜像/仓库名）、`package.json.name`、Service Worker 缓存名、SMTP `EHLO`/`Message-ID` 域标签
+- **`LICENSE` 版权归属改为 `Copyright (c) 2026 fine`**
+- **文档路径修正**：`spec/ARCHITECTURE.md` 架构图把 `db/store.js`、`db/history.js` 误写为 `lib/`；站点类型数量 `4 种` 更正为 `5 种`（与 `STATION_TYPES` 一致）
+- `README.md` 目录结构补齐 `deploy/`、`tools/`、`AGENTS.md`
+- 删除空目录残留 `docs/`、`.github/`（Docker CI 移除后遗留，未被 git 跟踪）
 
 ### Security
 - **修复构建产物泄露运行时凭证**（实测发现）：`next build` 会把 `data/` 连同真实凭证库拷进 `.next/standalone`，而 `Dockerfile` 正是 `COPY .next/standalone` → **镜像会带上站点 accessToken / JWT / 明文密码、面板密码哈希与会话密钥**
@@ -27,8 +35,8 @@ All notable changes from the upstream `lettimepassby/relay-monitor` project are 
 - `.env.example` 重写为 **SQLite 优先**：原文只列 MySQL 且标注"必填"，与 README「SQLite 默认」自相矛盾
   - 补充实际支持的变量：`DB_PATH`、`DB_DRIVER`、`REPORT_TIME_ZONE`、`TZ`、`V1_DATA_DIR`、`APP_COMMIT`（均与 `db/pool.js` / `db/migrate.js` / `server/report.js` 的实现逐一对齐）
   - 全部改为可选并注明默认值（零配置即可运行）
-- `deploy/docker-compose.yml` 镜像引用修正：原 `ghcr.io/lettimepassby/fine-apihub:latest` **并不存在**（实测 GHCR 返回 403；`lettimepassby` 名下只有私有的 `relay-monitor`，`flowleaves` 名下无 `fine-apihub`）
-  - 改为 `ghcr.io/flowleaves/fine-apihub:latest` + **新增 `build:` 段**，使 `docker compose up -d --build` 可直接从源码构建（本仓无镜像 CI，上游镜像为 MySQL 老版不可用）
+- `deploy/docker-compose.yml` 镜像引用修正：原镜像引用**并不存在**（实测 GHCR 返回 403＝不存在，与对照组同码）
+  - 改为 `ghcr.io/flowleaves/fine-apihub:latest` + **新增 `build:` 段**，使 `docker compose up -d --build` 可直接从源码构建（本仓无镜像 CI）
   - watchtower 段默认注释：仅在自有镜像发布到 GHCR 后才有意义（此前会拉取不存在的镜像）
 
 ### Breaking
@@ -36,7 +44,7 @@ All notable changes from the upstream `lettimepassby/relay-monitor` project are 
 
 ---
 
-## [2.3.0] - 2026-09-14 - FINE-APIHUB Fork
+## [2.3.0] - 2026-09-14 - Fork：SQLite 迁移 + 安全加固 + 品牌独立
 
 ### Database
 - **Replaced MySQL with SQLite** as the default and recommended database
@@ -62,7 +70,7 @@ All notable changes from the upstream `lettimepassby/relay-monitor` project are 
 - **Added API cache control**: `Cache-Control: no-store, no-cache, must-revalidate` for all `/api/*` routes
 
 ### Branding
-- Renamed project from `relay-monitor` to `FINE-APIHUB`
+- Renamed project to `fine-apihub`
   - Package name, manifest, titles, logs, SMTP EHLO, report footers
   - Default database path: `data/fine-apihub.db`
   - Service Worker cache name: `fine-apihub-shell-v2`
@@ -72,7 +80,7 @@ All notable changes from the upstream `lettimepassby/relay-monitor` project are 
 - **Removed Docker CI workflow** (`.github/workflows/docker.yml`)
   - Project now targets local SQLite deployment by default
   - Docker Compose config updated for SQLite mode
-- **Renamed git remote**: `origin` → `upstream` to prevent accidental pushes to upstream repository
+- **Adjusted git remotes**: kept a single `origin` remote for this repository
 
 ### Testing
 - Rewrote `db/store.test.js` to use real SQLite `:memory:` database instead of `fakePool`
@@ -99,20 +107,9 @@ All notable changes from the upstream `lettimepassby/relay-monitor` project are 
 
 ---
 
-## [2.2.0] - 2026-08-23 - Upstream Release (lettimepassby)
-
-Last upstream release before fork. See upstream repository for full changelog.
+## [2.2.0] - 2026-08-23
 
 ### Key Features
 - Added log audit (cache token accounting)
 - Added group/channel breakdown with period-over-period comparison
 - Flow data analytics (`/api/data/flow`)
-
----
-
-## Fork Information
-
-- **Upstream**: `github.com/lettimepassby/relay-monitor` (MIT License)
-- **Fork Date**: 2026-09-14
-- **Fork Reason**: SQLite local-first deployment, security hardening, independent branding
-- **Compatibility**: API surface unchanged, data models compatible with upstream v2.x

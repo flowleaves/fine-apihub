@@ -1,4 +1,4 @@
-# FINE-APIHUB · 中转站余额监控 v2
+# fine · 中转站余额监控 v2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -64,7 +64,7 @@ v1 的 `data/` 目录（stations.json / history.json / secret.key）可一次性
 
 ## Docker 部署（可选）
 
-> ⚠️ 本仓库**没有预构建镜像**：Docker CI 已移除（`spec/SECURITY.md`），上游 `ghcr.io/lettimepassby/relay-monitor` 是 MySQL 时期的旧版、与 v2 的 SQLite 不兼容。因此 compose 里用 `build:` **从源码构建**，需要在仓库内执行。
+> ⚠️ 本仓库**没有预构建镜像**：Docker CI 已移除（`spec/SECURITY.md`），因此 compose 里用 `build:` **从源码构建**，需要在仓库内执行。
 
 ```bash
 cd fine-apihub/deploy
@@ -102,8 +102,11 @@ fine-apihub/
 ├── lib/                  核心逻辑：providers / alerts / notify / smtp / forecast / auth + runtime 单例
 ├── db/                   数据持久化层：pool（SQLite/MySQL 双驱动）/ store / history / migrate
 ├── spec/                 规范文档：架构 / API / 数据模型 / 安全 / 预测 / Sub2API Key 用量
+├── deploy/               docker-compose.yml（面板 + 可选 watchtower）
+├── tools/                check-standalone.mjs 构建产物守卫 / gen-icons.mjs 图标生成
 ├── data/                 运行时数据（SQLite 库 + WAL）——已 gitignore，含凭证
 ├── instrumentation.ts    服务启动钩子：初始化 + 定时刷新 + 日报调度
+├── AGENTS.md             Agent 记忆入口（模块边界 / 红线 / 开发约定）
 └── public/               PWA manifest / 图标 / service worker
 ```
 
@@ -126,4 +129,4 @@ npm test        # 运行全部 45 项测试
 
 ## 开源协议
 
-[MIT](LICENSE) © FINE-APIHUB（基于 lettimepassby/relay-monitor 二创）
+[MIT](LICENSE) © fine

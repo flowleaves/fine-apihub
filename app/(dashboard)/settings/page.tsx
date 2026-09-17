@@ -175,7 +175,7 @@ export default function SettingsPage() {
 
         <ProCard title="关于" headerBordered>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            FINE-APIHUB{" "}
+            fine{" "}
             {appInfo && (
               <Tag>
                 v{appInfo.version}

@@ -11,8 +11,8 @@ export const POST = withAuth(async (request, rt) => {
   if (!channel) return json({ error: "未找到渠道" }, 400);
   const r = await sendToChannel(
     channel,
-    "【测试通知】FINE-APIHUB",
-    `这是一条测试消息，来自 FINE-APIHUB。\n渠道：${channel.name || channel.type}\n时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    "【测试通知】fine",
+    `这是一条测试消息，来自 fine。\n渠道：${channel.name || channel.type}\n时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
     { event: "test" }
   );
   return json(r);

@@ -1,4 +1,4 @@
-# FINE-APIHUB 规范文档
+# fine 规范文档
 
 > 本项目规范体系入口。二创改造后的架构约定、接口契约与安全策略。
 
@@ -17,7 +17,7 @@
 ## 快速参考
 
 ### 项目定位
-FINE-APIHUB 是一个自托管的 **sub2api / new-api 中转站余额监控面板**，forked from `lettimepassby/relay-monitor`。核心改造：MySQL → SQLite 单文件、安全加固、品牌独立。
+fine 是一个自托管的 **sub2api / new-api 中转站余额监控面板**。核心特性：SQLite 单文件、安全加固、独立品牌。
 
 ### 技术栈
 - **前端**：Next.js 16 App Router + React 19 + Ant Design Pro（antd 6）
@@ -60,14 +60,10 @@ globalThis.__FA_RT = { pool, store, history, sessions, refreshAll, restartPollin
 npm test    # 45 项测试，约 7 秒
 ```
 
-## 上游兼容
+## 仓库 / API 表面
 
-- 上游：`github.com/lettimepassby/relay-monitor`
-- git remote：
-  - `origin` = `github.com/flowleaves/fine-apihub`（自有仓库）
-  - `upstream` = 原作者仓库（仅用于合并上游修复，**禁止 push**）
-- 数据模型兼容 upstream v2.x
-- API 表面：在 upstream v2.x 基础上**新增** `GET /api/stations/:id/keys/usage`（Sub2API 按 Key 用量），其余端点未变
+- `origin` = `github.com/flowleaves/fine-apihub`
+- API 表面：25 个 REST 端点；其中 `GET /api/stations/:id/keys/usage`（Sub2API 按 Key 用量）为新增能力，其余端点为基线端点
 
 ---
 

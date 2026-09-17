@@ -1,17 +1,15 @@
-# FINE-APIHUB（Web 面板）· Agent 记忆入口
+# fine（Web 面板）· Agent 记忆入口
 
 `fine-apihub` 是**独立 git 仓库**里的自托管**中转站余额监控面板**（Next.js 全栈 + SQLite）。
-fork 自 `lettimepassby/relay-monitor`，核心改造：MySQL → SQLite 单文件、安全加固、品牌独立（relay → fine-apihub）。
+技术特性：SQLite 单文件持久化、安全加固、独立品牌。
 
 > ⚠️ **不要与 `fineapihub/` 混淆**：那是 **Tauri v2 + Rust 的 Windows 桌面应用**（另一个项目、另一套架构、另一个仓库）。两者只共享"Hub"这个名字。
 
-## 1. 仓库 / 上游
+## 1. 仓库
 
 | 项 | 值 |
 |---|---|
-| 自有仓库 | `origin` = `git@github.com:flowleaves/fine-apihub.git` |
-| 上游 | `upstream` = `git@github.com:lettimepassby/relay-monitor.git` |
-| 上游推送 | **已禁用**（`remote.upstream.pushurl = DISABLED`）——只用来合并上游修复 |
+| 仓库 | `origin` = `git@github.com:flowleaves/fine-apihub.git` |
 | 分支 | `main`（跟踪 `origin/main`） |
 | 详细规范 | 本仓库 `spec/`（架构 / API / 数据模型 / 安全 / 预测 / Sub2API Key 用量） |
 
@@ -73,8 +71,7 @@ npm run db:migrate  # 幂等；库非空即跳过
 - ✅ **已修** `.env.example` → 重写为 SQLite 优先，补齐 `DB_PATH` / `DB_DRIVER` / `REPORT_TIME_ZONE` / `TZ` / `V1_DATA_DIR` / `APP_COMMIT`（与代码逐一对齐，全部可选）。
 - ✅ **已修** 版本号三处不一致（`package.json`=2.3.0、`package-lock.json`=**2.2.0**、CHANGELOG 顶部=2.3.1）→ 统一为 **2.3.1**。
   ⚠️ `/api/meta` 的 `app.version` 读的是**构建时**的 `package.json`，改完**必须重新 `npm run build`** 才生效。
-- ✅ **已修** `deploy/docker-compose.yml` 镜像引用 → 关键事实：**原引用 `ghcr.io/lettimepassby/fine-apihub:latest` 并不存在**
-  （实测 GHCR：该名字返回 403＝不存在；`lettimepassby` 名下只有**私有**的 `relay-monitor`；`flowleaves` 名下无 `fine-apihub`）。
+- ✅ **已修** `deploy/docker-compose.yml` 镜像引用 → 关键事实：**原镜像引用并不存在**（实测该 GHCR 包名返回 403＝不存在，与「确定不存在」对照组同码）。
   现改为 `ghcr.io/flowleaves/fine-apihub:latest` + **`build:` 段**（从源码构建，本仓无镜像 CI），watchtower 段默认注释。
 - 遗留：根 `.gitignore`「独立 git 仓库」段仍缺 `/new-api/`、`/SillyTavern/`（各带 `.git`，当前在根仓库显示为未跟踪）。
 - 通读结论见工作区 `.agents/MEMORY.md` §22；边界见根 `spec/fine-apihub/SPEC.md`。

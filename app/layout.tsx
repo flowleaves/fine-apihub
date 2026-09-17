@@ -4,7 +4,7 @@ import Providers from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FINE-APIHUB",
+  title: "fine",
   description: "Sub2API / NewAPI 中转站余额与经营监控面板",
   manifest: "/manifest.webmanifest",
   icons: { apple: "/icons/apple-touch-icon.png" },

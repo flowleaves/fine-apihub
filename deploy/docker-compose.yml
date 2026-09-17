@@ -1,12 +1,11 @@
 # ============================================================
-# FINE-APIHUB 服务器部署：面板 +（可选）Watchtower 自动更新
+# fine 服务器部署：面板 +（可选）Watchtower 自动更新
 # ============================================================
 # 默认 SQLite：数据库就是挂载到宿主机的 ./db-data/fine-apihub.db，复制该文件即完成备份。
 # 设 DB_DRIVER=mysql 并填 DB_* 可切到外部 MySQL 实例（完整变量见仓库根的 .env.example）。
 #
 # ⚠️ 本仓库**没有预构建镜像**：
 #   - `ghcr.io/flowleaves/fine-apihub` 尚未发布（本仓已移除 Docker CI，只做本地部署）；
-#   - 上游 `ghcr.io/lettimepassby/relay-monitor` 是 MySQL 时期的旧版，与 v2 的 SQLite 不兼容。
 #   因此这里用 `build:` 从源码构建。将来若把镜像发布到上面的名字，可改为 `docker compose pull`，
 #   并启用文件末尾的 watchtower 段做自动更新。
 #

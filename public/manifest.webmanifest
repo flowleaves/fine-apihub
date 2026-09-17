@@ -1,6 +1,6 @@
 {
-  "name": "FINE-APIHUB",
-  "short_name": "FINE-APIHUB",
+  "name": "fine",
+  "short_name": "fine",
   "description": "sub2api / new-api 余额监控与经营分析面板",
   "start_url": "/",
   "scope": "/",

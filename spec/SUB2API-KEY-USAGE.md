@@ -2,13 +2,13 @@
 
 ## 范围
 
-Fine-APIHUB 仅对 Sub2API 站点提供按 API Key 的用量统计；NewAPI 普通用户令牌不纳入本功能。
+fine 仅对 Sub2API 站点提供按 API Key 的用量统计；NewAPI 普通用户令牌不纳入本功能。
 
 ## 接口
 
 `GET /api/stations/:id/keys/usage?range=today|24h|7d|30d`
 
-该接口要求 Fine-APIHUB 登录，并要求站点凭证对应 Sub2API 管理员账号。响应只返回 Key ID、名称和统计值，不返回完整 API Key 或 JWT。
+该接口要求 fine 登录，并要求站点凭证对应 Sub2API 管理员账号。响应只返回 Key ID、名称和统计值，不返回完整 API Key 或 JWT。
 
 ## 数据口径
 

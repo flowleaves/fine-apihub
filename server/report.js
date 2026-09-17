@@ -295,7 +295,7 @@ function buildReportHtml(rt, d) {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};padding:18px 0"><tr><td align="center">
   <table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%">
     <tr><td style="padding:6px 12px 2px;${font}font-size:18px;font-weight:700;color:${C.ink}">${esc(d.own.name)} 日报</td></tr>
-    <tr><td style="padding:0 12px 8px;${font}font-size:12px;color:${C.sub}">${esc(d.dateLabel)}（周${esc(d.dow)}）· 由 FINE-APIHUB 生成</td></tr>
+    <tr><td style="padding:0 12px 8px;${font}font-size:12px;color:${C.sub}">${esc(d.dateLabel)}（周${esc(d.dow)}）· 由 fine 生成</td></tr>
     <tr><td><table width="100%" cellpadding="0" cellspacing="0"><tr>
       ${kpi("昨日消费", money(d.totalCost * d.ownRate), d.prev != null ? `环比 ${pctDelta(d.totalCost, d.prev)} · 7日均 ${pctDelta(d.totalCost, d.avg7)}` : "", null)}
       ${kpi("收入（不含管理员）", money(d.incomeUsd * d.ownRate), d.adminUsd > 0 ? `管理员另耗 ${money(d.adminUsd * d.ownRate)}` : "", null)}
@@ -311,7 +311,7 @@ function buildReportHtml(rt, d) {
     ${section("上游余额", upRows)}
     ${d.hasUsers ? section(`用户余额合计：${money(d.balanceTotal)}（预收 · ${d.userCount} 个用户）`, "") : ""}
     ${outlook ? section("展望", outlook) : ""}
-    <tr><td style="padding:16px 12px;${font}font-size:11px;color:${C.sub}">FINE-APIHUB 每日日报 · 统计区间为 ${esc(d.dateLabel)} 00:00–24:00</td></tr>
+    <tr><td style="padding:16px 12px;${font}font-size:11px;color:${C.sub}">fine 每日日报 · 统计区间为 ${esc(d.dateLabel)} 00:00–24:00</td></tr>
   </table></td></tr></table></body></html>`;
 }
 
