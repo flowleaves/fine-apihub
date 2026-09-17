@@ -5,6 +5,7 @@ import { forecastDaily, forecastHourly } from "../../../../lib/forecast.js";
 import {
   ownCache, getOwnUsers, computeResold, computeProfit, computeFlowBreakdown, joinPrev, resolveOwnWindow,
 } from "../../../../server/own-helpers.js";
+import { ensureOwnFresh } from "../../../../server/refresh.js";
 
 export const GET = withAuth(async (request, rt) => {
   const { store } = rt;
@@ -14,6 +15,9 @@ export const GET = withAuth(async (request, rt) => {
       error: "还没有标记「我的中转站」：添加/编辑你的 New API 站点，勾选「这是我自己的中转站」（需管理员令牌）",
     }, 400);
   }
+  // 「我的站点 / 经营分析」页面正在使用 = 触发自有站余额的节流刷新
+  //（默认 1 小时最多一次；自有站是生产站，避免被 30s 轮询持续打）
+  const fresh = await ensureOwnFresh(rt).catch(() => null);
   const sp = new URL(request.url).searchParams;
   // 展示窗口 + 上一等长窗口（环比用来抓「昨天 $11、今天 $152」这类跳变）
   const { range, tz, now, midnight, startMs, spanDays, prevStart, prevEnd } = resolveOwnWindow(sp);
@@ -22,7 +26,8 @@ export const GET = withAuth(async (request, rt) => {
   const cache = ownCache(rt);
   const cacheKey = `${range}|${tz}`;
   const hit = cache.get(cacheKey);
-  if (hit && Date.now() - hit.at < 120000) return json(hit.payload);
+  // ownFresh 是「本次请求有没有触发自有站刷新 / 下次最早何时可刷」，不随 120s 分析缓存走
+  if (hit && Date.now() - hit.at < 120000) return json({ ...hit.payload, ownFresh: fresh });
 
   try {
     // 模型行一次拉 35 天（窗口展示 + 日消费预测共用）；用户行只拉展示窗口。
@@ -156,7 +161,7 @@ export const GET = withAuth(async (request, rt) => {
       generatedAt: new Date().toISOString(),
     };
     cache.set(cacheKey, { at: Date.now(), payload });
-    return json(payload);
+    return json({ ...payload, ownFresh: fresh });
   } catch (err) {
     return json({ error: err?.message || String(err) }, 502);
   }

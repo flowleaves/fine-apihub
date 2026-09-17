@@ -175,6 +175,7 @@ Expires: 0
 ```
 
 **行为**：与后台定时轮询共用同一套 `refreshAll` 逻辑，含去重、告警评估、历史记录。
+**范围**：`scope: "all"` —— 手动刷新是用户显式动作，**不受自有站节流限制**，并会重置节流计时。
 
 ---
 
@@ -361,6 +362,7 @@ Expires: 0
 ```
 
 **缓存**：同 `(range, tz)` 组合缓存 120 秒。
+**副作用**：调用时会触发 `ensureOwnFresh()` —— 即「我的站点 / 经营分析」页面在使用中时，按 `settings.ownRefreshIntervalSec`（默认 1 小时）节流刷新自有站余额/历史；响应里的 `ownFresh` 字段回显本次是否真的刷新了（`{refreshed, nextInSec, lastAt}`）。
 
 ### `GET /api/own/audit`
 
@@ -421,6 +423,7 @@ Expires: 0
 ```json
 {
   "refreshIntervalSec": 60,
+  "ownRefreshIntervalSec": 3600,
   "lowBalanceUsd": 5,
   "dailyReport": { "enabled": true, "time": "09:00", "channelIds": ["ch_xxx"] }
 }
@@ -428,7 +431,9 @@ Expires: 0
 
 **响应**：`200 { settings: <完整设置对象> }`
 
-**行为**：刷新间隔变化后自动重启轮询定时器，并立即执行一轮全量刷新。
+**行为**：刷新间隔变化后自动重启轮询定时器，并立即**全量**刷新一轮（含自有站，不受节流限制），同时重置自有站节流计时。
+
+> `ownRefreshIntervalSec`：自有站分析刷新节流（秒），`0` = 不节流，最小 60。详见 `ARCHITECTURE.md` §3.1。
 
 ---
 

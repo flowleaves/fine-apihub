@@ -101,12 +101,28 @@ lib/runtime.js::getRuntime()
 
 ## 3. 刷新与告警流程
 
+### 3.1 两档刷新（2026-09-17 起）
+
+自有站（`isOwn`）是生产站，分析一次要打它 5+ 个接口，因此**按归属分档**：
+
+| 档 | 范围 | 间隔 | 触发方式 |
+|---|---|---|---|
+| 常规轮询 | **其它站点**（`isOwn=false`） | `settings.refreshIntervalSec`（默认 60s，实配 600s） | `restartPolling` 定时器 → `refreshAll(rt, { scope: "others" })` |
+| 自有站节流 | **我的站点**（`isOwn=true`） | `settings.ownRefreshIntervalSec`（默认 3600s；0 = 不节流） | `ensureOwnFresh(rt)`：由 `/api/own/analytics` 触发 —— 即「我的站点 / 经营分析」页面正在使用时 |
+| 全量 | 全部 | — | 启动首刷（`lib/runtime.js`）、手动 `POST /api/refresh`、`PUT /api/settings`（均不受节流限制，并重置节流计时） |
+
+- `stationsForScope(stations, "others" | "own" | "all")` 是唯一的筛选入口。
+- 节流先占位 `rt._ownRefreshedAt` 再刷新，并发请求不会重复触发（`refreshStation` 的同站去重是第二层兜底）。
+- ⚠️ **副作用**：自有站余额不再被后台常规轮询覆盖 → 它的**低余额/耗尽告警最长延迟一个节流周期**（默认 1 小时），且只有相关页面被打开时才会刷新。若需要自有站也参与常规告警，把 `ownRefreshIntervalSec` 设 0（并接受生产站负载），或改回把自有站并入常规档。
+
+### 3.2 单站刷新流程
+
 ```
-定时轮询 (restartPolling)
+定时轮询 (restartPolling) / ensureOwnFresh / 手动
   │  间隔：settings.refreshIntervalSec（默认 60 秒）
   ▼
-refreshAll(rt)
-  │
+refreshAll(rt, { scope })
+  │  scope: others | own | all —— 由 stationsForScope 过滤
   ├──► 对每个站点调用 refreshStation(rt, station)
   │      │
   │      ├──► 去重检查：rt._inflightRefresh Map 保证同站同时只有一个刷新在途
@@ -125,7 +141,7 @@ refreshAll(rt)
   │      ├──► 更新 station.balance（内存 + 后续 save() 写透）
   │      │
   │      ├──► 成功时 rt.history.append(station.id, remaining, used)
-  │      │      内存追加 + 攒批 1.5s 后写透 SQLite
+  │      │      内存追加 + 攒批 1.5s 后写透 SQLite（→ history_points）
   │      │
   │      ├──► lib/alerts.js::evaluateStation() → 状态迁移 + 通知触发
   │      │      │
@@ -167,7 +183,7 @@ refreshAll(rt)
 | `lib/alerts.js` | 告警状态迁移 + 通知触发 | 不靠定时轰炸，靠状态迁移 |
 | `lib/forecast.js` | 消费预测（日级/小时级） | 四模型等权组合已回测定型，换模型需附数据 |
 | `lib/auth.js` | 密码哈希 + 会话签名 + 限流 | scrypt 参数不可降 |
-| `server/refresh.js` | 后台刷新循环 | `refreshStation` 去重必须保留 |
+| `server/refresh.js` | 后台刷新循环（分档调度：`stationsForScope` / `ensureOwnFresh`） | `refreshStation` 去重必须保留；自有站节流不得被手动刷新绕过（手动必须仍是 all） |
 | `server/report.js` | 日报调度 | 定时按北京时间触发 |
 
 ## 6. 前端架构

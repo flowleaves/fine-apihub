@@ -62,6 +62,11 @@ npm run db:backup   # 一致性在线备份（WAL 下别直接 cp .db）→ data
 
 - **运行方式**：`next.config.mjs` 设了 `output: "standalone"`，所以 `npm start`（`next start`）会告警，**规范做法**是
   `node .next/standalone/server.js`（需先把 `.next/static` 与 `public` 拷进 `.next/standalone`，见 `Dockerfile`）。
+- **刷新分档（改调度前必读）**：自有站（`isOwn`）是生产站，分析一次要打它 5+ 个接口，因此
+  `server/refresh.js` 按归属分档——**其它站点**走定时轮询（`refreshIntervalSec`），**自有站**只在
+  「我的站点 / 经营分析」页面使用时由 `ensureOwnFresh()` 按 `ownRefreshIntervalSec`（默认 1 小时）节流刷新；
+  启动首刷 / 手动 `POST /api/refresh` / `PUT /api/settings` 始终是 `scope:"all"` 全量。详见 `spec/ARCHITECTURE.md` §3.1。
+  ⚠️ 代价：自有站不参与常规轮询 → 它的余额告警最长延迟一个节流周期；要恢复把 `ownRefreshIntervalSec` 设 0。
 - **数据库**：默认 SQLite `data/fine-apihub.db`（WAL 模式，`node:sqlite` 内置模块）；`DB_DRIVER=mysql` 切 MySQL。
   一致性备份用 `db/pool.js::backupTo()`，**不要**在 WAL 下直接复制 `.db`。
 - **默认账号**：`admin` / `admin123`（首次登录 `isDefaultPassword: true`），对外暴露前必须改。

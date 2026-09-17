@@ -38,6 +38,7 @@ export default function SettingsPage() {
 
   // 全局设置（对照 v1 state.settings：refreshIntervalSec / lowBalanceUsd）
   const [interval, setIntervalSec] = useState<number | null>(null);
+  const [ownInterval, setOwnInterval] = useState<number | null>(null);
   const [low, setLow] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -56,6 +57,7 @@ export default function SettingsPage() {
     api("/api/meta")
       .then((m) => {
         setIntervalSec(m.settings.refreshIntervalSec);
+        setOwnInterval(m.settings.ownRefreshIntervalSec ?? 3600);
         setLow(m.settings.lowBalanceUsd);
         setAppInfo(m.app || null);
       })
@@ -74,10 +76,15 @@ export default function SettingsPage() {
     try {
       const r = await api("/api/settings", {
         method: "PUT",
-        body: { refreshIntervalSec: Number(interval), lowBalanceUsd: Number(low) },
+        body: {
+          refreshIntervalSec: Number(interval),
+          ownRefreshIntervalSec: Number(ownInterval),
+          lowBalanceUsd: Number(low),
+        },
       });
       // 服务端可能钳制过（间隔最小 10 秒、阈值最小 0），以返回值为准回显
       setIntervalSec(r.settings.refreshIntervalSec);
+      setOwnInterval(r.settings.ownRefreshIntervalSec ?? 3600);
       setLow(r.settings.lowBalanceUsd);
       message.success("设置已保存");
     } catch (e: any) {
@@ -115,7 +122,7 @@ export default function SettingsPage() {
     <PageContainer title="设置" subTitle="刷新策略、告警阈值与面板账号">
       <Space orientation="vertical" size={16} style={{ display: "flex" }}>
         <ProCard title="全局设置" headerBordered>
-          <SetRow title="自动刷新间隔" desc="后台按此间隔自动查询各中转站余额">
+          <SetRow title="自动刷新间隔" desc="后台按此间隔自动查询「其它中转站」的余额（不含我的站点）">
             <Space>
               <InputNumber
                 value={interval}
@@ -124,6 +131,21 @@ export default function SettingsPage() {
                 style={{ width: 120 }}
               />
               <Text type="secondary">秒</Text>
+            </Space>
+          </SetRow>
+          <SetRow
+            title="我的站点刷新节流"
+            desc="「我的站点」是生产站，分析一次要打它 5+ 个接口。仅当你正打开「我的站点 / 经营分析」页时才按此间隔刷新一次；0 = 不节流（每次页面请求都刷）"
+          >
+            <Space>
+              <InputNumber
+                value={ownInterval}
+                onChange={(v) => setOwnInterval(v)}
+                min={0}
+                step={600}
+                style={{ width: 120 }}
+              />
+              <Text type="secondary">秒（默认 3600 = 1 小时）</Text>
             </Space>
           </SetRow>
           <SetRow title="全局低余额阈值" desc="剩余余额低于此值时标记为「余额偏低」（可被单站阈值覆盖）">

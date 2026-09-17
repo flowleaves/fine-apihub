@@ -5,7 +5,10 @@ import { hashPassword } from "../lib/auth.js";
 import { ALERT_EVENT_KEYS, DEFAULT_RULES } from "../lib/alerts.js";
 
 const DEFAULT_SETTINGS = {
-  refreshIntervalSec: 60, // 后台自动刷新间隔
+  refreshIntervalSec: 60, // 后台自动刷新间隔（只用于「其它站点」的余额轮询）
+  // 「我的站点」分析/用量数据的刷新节流间隔（秒）。自有站是生产站，分析一次要打它 5+ 个接口，
+  // 因此默认 1 小时，且只在该站相关页面（我的站点 / 经营分析）正在使用时才触发；0 = 不节流。
+  ownRefreshIntervalSec: 3600,
   lowBalanceUsd: 5, // 全局低余额告警阈值（美元）
   // 每日日报：默认按北京时间定时汇总昨日「我的站点」经营情况并推送
   dailyReport: { enabled: false, time: "09:00", channelIds: [], lastSent: null },
@@ -193,6 +196,11 @@ export class Store {
   }
 
   async updateSettings(patch) {
+    // ownRefreshIntervalSec：0 表示不节流，所以不能用 `|| 默认值`（0 会被吞掉）
+    if (patch.ownRefreshIntervalSec != null) {
+      const n = Number(patch.ownRefreshIntervalSec);
+      patch = { ...patch, ownRefreshIntervalSec: Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_SETTINGS.ownRefreshIntervalSec };
+    }
     // dailyReport 做字段级合并与校验，保留 lastSent
     if (patch.dailyReport && typeof patch.dailyReport === "object") {
       const cur = this.data.settings.dailyReport || DEFAULT_SETTINGS.dailyReport;

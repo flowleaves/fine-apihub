@@ -67,8 +67,40 @@ async function doRefreshOne(rt, station) {
   return result;
 }
 
-export async function refreshAll(rt) {
-  return Promise.all(rt.store.list().map((s) => refreshStation(rt, s)));
+export async function refreshAll(rt, { scope = "all" } = {}) {
+  return Promise.all(stationsForScope(rt.store.list(), scope).map((s) => refreshStation(rt, s)));
+}
+
+/**
+ * 按「归属」筛选要刷新的站点：
+ *   others = 其它站点（非 isOwn）：走常规定时轮询，固定间隔
+ *   own    = 我的站点（isOwn）：生产站，只在相关页面在使用时按 ownRefreshIntervalSec 节流刷新
+ *   all    = 全部（手动刷新 / 启动首刷，不受节流限制）
+ */
+export function stationsForScope(stations, scope = "all") {
+  if (scope === "own") return stations.filter((s) => !!s.isOwn);
+  if (scope === "others") return stations.filter((s) => !s.isOwn);
+  return stations;
+}
+
+/**
+ * 「我的站点」数据的节流刷新（由 /api/own/* 触发 = 相关页面正在使用）。
+ * 自有站刷新一次会产生 5+ 个上游请求，因此默认 1 小时只允许一次；
+ * 页面 30s 轮询时绝大多数调用会在这里被挡掉，不会打到生产站。
+ * 设置 ownRefreshIntervalSec = 0 可关闭节流（等同每次页面请求都刷）。
+ */
+export async function ensureOwnFresh(rt, { force = false, now = Date.now() } = {}) {
+  const raw = Number(rt.store.settings.ownRefreshIntervalSec);
+  const sec = Number.isFinite(raw) ? raw : 3600;
+  const last = rt._ownRefreshedAt || 0;
+  if (!force && sec > 0 && now - last < sec * 1000) {
+    return { refreshed: false, nextInSec: Math.ceil((sec * 1000 - (now - last)) / 1000), lastAt: last || null };
+  }
+  // 先占位再刷：并发请求不会重复触发（refreshStation 自身还有同站去重兜底）
+  rt._ownRefreshedAt = now;
+  const started = Date.now();
+  await refreshAll(rt, { scope: "own" });
+  return { refreshed: true, at: now, tookMs: Date.now() - started, lastAt: last || null };
 }
 
 // ---------------------------------------------------------------------------
@@ -82,6 +114,8 @@ export function restartPolling(rt) {
   rt._pollTimer = setInterval(() => {
     if (rt._pollRunning) return; // 上一轮还没结束（慢站点超时可达几十秒）就跳过本轮
     rt._pollRunning = true;
-    refreshAll(rt).catch(() => {}).finally(() => { rt._pollRunning = false; });
+    // 定时轮询只刷「其它站点」：自有站是生产站，改由 ensureOwnFresh（相关页面在使用时）节流刷新，
+    // 避免无人在看时也持续打它。手动刷新（POST /api/refresh）仍是全量。
+    refreshAll(rt, { scope: "others" }).catch(() => {}).finally(() => { rt._pollRunning = false; });
   }, sec * 1000);
 }

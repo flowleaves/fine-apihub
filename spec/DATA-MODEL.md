@@ -92,7 +92,8 @@
 
 ```typescript
 {
-  refreshIntervalSec: number;   // 默认 60
+  refreshIntervalSec: number;   // 默认 60；只用于「其它站点」（isOwn=false）的余额轮询
+  ownRefreshIntervalSec: number; // 默认 3600；「我的站点」分析刷新节流（0 = 不节流）
   lowBalanceUsd: number;        // 默认 5
   dailyReport: {
     enabled: boolean;
@@ -102,6 +103,9 @@
   };
 }
 ```
+
+> `ownRefreshIntervalSec` 只影响 `ensureOwnFresh()`（由 `/api/own/*` 触发）的节流窗口；
+> 后台定时轮询不再覆盖自有站，手动刷新与启动首刷始终是全量。
 
 #### `Channel`
 

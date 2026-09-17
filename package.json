@@ -12,7 +12,7 @@
     "build:webpack": "next build --webpack && node tools/check-standalone.mjs",
     "check:standalone": "node tools/check-standalone.mjs --strict",
     "start": "next start",
-    "test": "node --no-warnings --test lib/alerts.test.js lib/providers.test.js db/store.test.js db/history.test.js server/own-helpers.test.js app/api/analytics/aggregate.test.js",
+    "test": "node --no-warnings --test lib/alerts.test.js lib/providers.test.js db/store.test.js db/history.test.js server/own-helpers.test.js server/refresh.test.js app/api/analytics/aggregate.test.js",
     "db:migrate": "node --no-warnings db/migrate.js",
     "db:backup": "node --no-warnings db/backup.js"
   },
