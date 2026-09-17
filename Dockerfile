@@ -1,4 +1,4 @@
-# FINE-APIHUB v2（Next.js standalone + SQLite）
+# fine v2（Next.js standalone + SQLite）
 # ---- 构建阶段 ----------------------------------------------------------------
 FROM node:24-alpine AS builder
 
