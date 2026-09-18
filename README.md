@@ -116,16 +116,17 @@ docker compose up -d --build        # 首次构建约几分钟
 fine-apihub/
 ├── app/                  Next.js App Router
 │   ├── (dashboard)/      面板页面：总览 / 中转站 / 我的站点 / 用量 / 经营分析 / 通知 / 设置
-│   ├── api/              25 个 REST 端点（Route Handlers）
+│   ├── api/              26 个 REST 端点（Route Handlers）
 │   └── login/            登录页
-├── server/               后台常驻逻辑：refresh.js 刷新循环 / report.js 日报
+├── server/               后台常驻逻辑：refresh.js 刷新调度（分档 + 用量采样）/ report.js 日报 / own-helpers
 ├── lib/                  核心逻辑：providers / alerts / notify / smtp / forecast / auth + runtime 单例
-├── db/                   数据持久化层：pool（SQLite/MySQL 双驱动）/ store / history / migrate
-├── spec/                 规范文档：架构 / API / 数据模型 / 安全 / 预测 / Sub2API Key 用量
+├── db/                   数据持久化层：pool（SQLite/MySQL 双驱动）/ store / history / usage / migrate / backup
+├── spec/                 规范文档：架构（含上游接口实测约束）/ API / 数据模型 / 安全 / 预测 / Sub2API Key 用量
 ├── deploy/               docker-compose.yml（面板 + 可选 watchtower）
 ├── tools/                check-standalone.mjs 构建产物守卫 / gen-icons.mjs 图标生成
 ├── data/                 运行时数据（SQLite 库 + WAL）——已 gitignore，含凭证
 ├── instrumentation.ts    服务启动钩子：初始化 + 定时刷新 + 日报调度
+├── start.bat             Windows 一键启动
 ├── AGENTS.md             Agent 记忆入口（模块边界 / 红线 / 开发约定）
 └── public/               PWA manifest / 图标 / service worker
 ```
@@ -144,7 +145,7 @@ fine-apihub/
 ## 测试
 
 ```bash
-npm test        # 运行全部 45 项测试
+npm test        # 运行全部 59 项测试
 ```
 
 ## 开源协议

@@ -21,8 +21,8 @@
 | 路径 | 职责 | 改动注意 |
 |---|---|---|
 | `app/(dashboard)/` | 面板页面：总览 / 中转站 / 我的站点 / 用量 / 经营分析 / 通知 / 设置 | 无全局状态库，页面侧自刷新 |
-| `app/api/` | **25 个** Route Handler（REST） | 一律经 `lib/api.js::withAuth`，响应形状与 v1 一致 |
-| `lib/providers.js` | 上游站点适配器（916 行，最重核心） | `QUOTA_PER_UNIT = 500000` 是**唯一**换算常量 |
+| `app/api/` | **26 个** Route Handler（REST） | 一律经 `lib/api.js::withAuth`，响应形状与 v1 一致 |
+| `lib/providers.js` | 上游站点适配器（994 行，最重核心） | `QUOTA_PER_UNIT = 500000` 是**唯一**换算常量；上游实测约束见 `spec/ARCHITECTURE.md` §4.1 |
 | `lib/alerts.js` | 告警状态迁移 + 通知触发 | 靠**状态迁移**触发，不做定时轰炸 |
 | `lib/forecast.js` | 消费预测（日级 / 小时级） | 四模型等权组合已回测定型，换模型须附 60 天回测数据（`spec/FORECAST.md` §8） |
 | `lib/notify.js` / `lib/smtp.js` | 10 种通知渠道 | 新渠道先加 `CHANNEL_TYPES` |
@@ -31,7 +31,7 @@
 | `db/pool.js` | 驱动抽象 + 方言翻译 + 建表 | 新 SQL 必须**同时兼容** SQLite + MySQL |
 | `db/store.js` / `db/history.js` | 内存缓存 + 写透 | `save()` 必须串行化；`MAX_POINTS` / `MAX_AGE_MS` 不可随意改 |
 | `db/usage.js` | 每日用量落库（`usage_points`） | upsert 保留 MySQL 写法（由 `pool.js` 转写）；缺失=未采样，禁止写 0 冒充 |
-| `server/refresh.js` | 后台刷新循环 | `refreshStation` 同站去重**必须保留** |
+| `server/refresh.js` | 刷新调度：分档（others/own）+ 用量采样 | `refreshStation` 同站去重**必须保留**；节流不得被手动刷新绕过 |
 | `server/report.js` | 每日日报调度 | 按 `REPORT_TIME_ZONE`（默认北京时间） |
 | `server/stations.js` | `redact()` 统一脱敏 | 所有下发前必过 |
 | `instrumentation.ts` | 启动钩子 | → `lib/runtime.js::getRuntime()` |
@@ -48,7 +48,7 @@
 ## 4. 开发约定
 
 ```bash
-npm test            # node --test（非 jest/vitest）：45 项，约 7s，全绿
+npm test            # node --test（非 jest/vitest）：59 项，约 7s，全绿
 npm run dev         # 开发模式
 npm run build       # → standalone 产物（末尾自动跑 check-standalone 守卫）
 npm run build:webpack          # 同上，但用 webpack 构建（standalone 更精简）
@@ -75,12 +75,24 @@ npm run db:backup   # 一致性在线备份（WAL 下别直接 cp .db）→ data
 - **默认账号**：`admin` / `admin123`（首次登录 `isDefaultPassword: true`），对外暴露前必须改。
 - 测试文件与被测模块同目录（`lib/providers.test.js` 等），新增核心逻辑请补 `node --test` 用例。
 
-## 5. 已知待办 / 遗留（2026-09-17 通读发现）
+## 5. 演进记录 / 遗留
 
-- ✅ **已修** `.env.example` → 重写为 SQLite 优先，补齐 `DB_PATH` / `DB_DRIVER` / `REPORT_TIME_ZONE` / `TZ` / `V1_DATA_DIR` / `APP_COMMIT`（与代码逐一对齐，全部可选）。
-- ✅ **已修** 版本号三处不一致（`package.json`=2.3.0、`package-lock.json`=**2.2.0**、CHANGELOG 顶部=2.3.1）→ 统一为 **2.3.1**。
-  ⚠️ `/api/meta` 的 `app.version` 读的是**构建时**的 `package.json`，改完**必须重新 `npm run build`** 才生效。
-- ✅ **已修** `deploy/docker-compose.yml` 镜像引用 → 关键事实：**原镜像引用并不存在**（实测该 GHCR 包名返回 403＝不存在，与「确定不存在」对照组同码）。
-  现改为 `ghcr.io/flowleaves/fine-apihub:latest` + **`build:` 段**（从源码构建，本仓无镜像 CI），watchtower 段默认注释。
-- 遗留：根 `.gitignore`「独立 git 仓库」段仍缺 `/new-api/`、`/SillyTavern/`（各带 `.git`，当前在根仓库显示为未跟踪）。
-- 通读结论见工作区 `.agents/MEMORY.md` §22；边界见根 `spec/fine-apihub/SPEC.md`。
+**2026-09-17 本轮已完成**：
+- ✅ `.env.example` 重写为 SQLite 优先（`DB_PATH` / `DB_DRIVER` / `REPORT_TIME_ZONE` / `TZ` / `V1_DATA_DIR` / `APP_COMMIT`）。
+- ✅ 版本号三处不一致（`package.json`=2.3.0、`package-lock.json`=2.2.0、CHANGELOG=2.3.1）→ 统一 **2.3.1**。
+  ⚠️ `/api/meta` 的 `app.version` 读**构建时**的 `package.json`，改完必须重新 `npm run build`。
+- ✅ `deploy/docker-compose.yml`：原镜像引用**不存在**（GHCR 实测 403）→ 改 `ghcr.io/flowleaves/fine-apihub:latest` + `build:` 段，watchtower 默认注释。
+- ✅ **修复构建产物泄露凭证**：`next build` 会把 `data/`（真实凭证库）拷进 `.next/standalone`，而 Dockerfile 正是拷它 → 加 `tools/check-standalone.mjs` 守卫 + Dockerfile 断言。
+- ✅ 品牌与作者统一为 `fine`；`LICENSE` 仅保留自有版权（站长确认已获原作者许可）；移除 `upstream` remote。
+- ✅ 新增 `npm run db:backup`（把原本「文档推荐却无入口」的 `backupTo()` 接出 CLI）。
+- ✅ 刷新分档调度 + 自有站节流（`spec/ARCHITECTURE.md` §3.1）；`/api/own/analytics` 的缓存窗口也绑到同一节流值。
+- ✅ 每日用量落库 `usage_points` + `GET /api/usage/daily`（日粒度、每站每小时采样一次）。
+- ✅ Claude 风设计 token（`app/theme.ts` + `--cl-*` CSS 变量，全站生效）。
+- ✅ 删除「消耗月历」页面及其专用接口（`/api/calendar` 与 `queryDailyCost`/`chunkRange`）—— 无消费者的死代码；上游实测约束已固化到 `spec/ARCHITECTURE.md` §4.1。
+- ✅ 新增 Windows 一键启动 `start.bat`（纯 ASCII，原因见 README）。
+
+**遗留 / 待定**：
+- 根 `.gitignore`「独立 git 仓库」段仍缺 `/new-api/`、`/SillyTavern/`（各带 `.git`，当前在根仓库显示为未跟踪）。
+- `GET /api/stations/:id/keys/usage`（Sub2API 按 Key 用量）**后端已实现且有测试，但前端没有入口** —— 是「功能未接 UI」而非死代码，需要时在「用量」页加一个视图即可。
+- `$`/`¥` 折算依赖各站 `cnyPerUsd`，未配置时按 1:1（会让 ¥ 列等于 $ 列，不是 bug）。
+- 工作区侧记录见 `.agents/MEMORY.md` §22、根 `spec/fine-apihub/SPEC.md`。

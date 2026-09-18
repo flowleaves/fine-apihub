@@ -8,7 +8,7 @@
 |------|------|
 | `README.md` | 本文件：规范体系总览与快速导航 |
 | `ARCHITECTURE.md` | 系统架构：分层、数据流、关键模块职责 |
-| `API.md` | 接口规范：25 个端点的请求/响应契约 |
+| `API.md` | 接口规范：26 个端点的请求/响应契约 |
 | `DATA-MODEL.md` | 数据模型：SQLite 表结构、内存缓存形状、迁移规则 |
 | `SECURITY.md` | 安全策略：认证、授权、凭据处理、响应头、审计日志 |
 | `FORECAST.md` | 预测模型：四模型等权组合 + conformal 区间的实现细节与回测结论 |
@@ -57,13 +57,14 @@ globalThis.__FA_RT = { pool, store, history, sessions, refreshAll, restartPollin
 
 ### 测试
 ```bash
-npm test    # 45 项测试，约 7 秒
+npm test    # 59 项测试，约 7 秒
 ```
 
 ## 仓库 / API 表面
 
 - `origin` = `github.com/flowleaves/fine-apihub`
-- API 表面：25 个 REST 端点；其中 `GET /api/stations/:id/keys/usage`（Sub2API 按 Key 用量）为新增能力，其余端点为基线端点
+- API 表面：26 个 REST 端点；其中 `GET /api/stations/:id/keys/usage`（Sub2API 按 Key 用量）与
+  `GET /api/usage/daily`（本地落库的每日用量）为新增能力，其余端点为基线端点
 
 ---
 

@@ -168,12 +168,28 @@ refreshAll(rt, { scope })
 | stations（站点列表） | `rt.store.data.stations` | `stations` 表 | 串行 save()，事务写透 |
 | settings / auth / notifications | `rt.store.data.{settings,auth,notifications}` | `meta` 表 | 随 stations 一起 save() |
 | history_points（余额历史） | `rt.history.data` | `history_points` 表 | 攒批 1.5s 后写透 |
+| usage_points（每日用量） | 无（直接读写库） | `usage_points` 表 | 每站每小时采样「当天」一次，幂等 upsert |
 | sessions | `rt.sessions`（Secret + failures Map） | `meta.session_secret` | Secret 启动时加载/生成 |
 
 **读写规则**：
 - **读**：全部走内存（同步 getter），零延迟。
 - **写**：经 `save()` 串行化写透 SQLite，避免并发写冲突。
 - **历史**：`append()` 先写内存 → `scheduleSave()` 攒批 → 1.5s 后 INSERT OR IGNORE。
+
+## 4.1 上游用量接口的实测约束（2026-09-17 实测，改用量相关代码前必读）
+
+这些是**对真实站点压出来的边界**，不是文档推测；踩过的坑记在这里，避免重复试错：
+
+| 上游接口 | 实测行为 |
+|---|---|
+| new-api `GET /api/data/self` | 返回行按 `(model_name, created_at)` 聚合，`created_at` 是**小时**对齐的 Unix 秒（相邻差 3600）——不是日粒度，要自己按 tz 分桶。**硬限制：时间跨度不得超过 1 个月**（31 天即 `success:false` + `时间跨度不能超过 1 个月`）；实际可查保留约 **20 天**（476 小时） |
+| new-api `GET /api/log/` | `page_size` 上限 **100**；需要管理员/root 令牌，否则报权限错误 |
+| Sub2API `GET /api/v1/usage/dashboard/snapshot-v2` | `granularity=day` → 每天一行 `date:"YYYY-MM-DD"` + `actual_cost`（与站点面板同口径）；`granularity=hour` → 逐小时。**只返回有数据的日期**（未来日期为空），保留约 **23~30 天**（32 天窗口只回 23 行） |
+| Sub2API `GET /api/v1/usage/dashboard/stats` | `today_actual_cost / today_tokens / today_requests` —— 「今天」一律用这个数，只有它和站点页面显示的逐字一致 |
+| Sub2API `POST /api/v1/admin/dashboard/api-keys-usage` | **不带时间窗参数**，返回上游默认窗口（30 天累计 + today）。所以「按 Key 的按日」拿不到，`effectiveRange` 必须如实标为 `30d-or-provider-default` |
+| 参考探测方法 | 用 `GET /api/data/self?start_timestamp&end_timestamp` 直接打真实站点，看 `data[].created_at` 的**相邻差值**即可判断粒度（3600=小时）；判断「无数据」与「请求被拒」要看 `success`/`message`，不能只看 `rows=0` |
+
+**结论**：日粒度数据要么**只查上游能覆盖的窗口**（受上面保留期限制），要么**落库累积**（本项目的做法：`usage_points` + 每小时采样）。不要指望向上游要「任意历史月份」。
 
 ## 5. 模块职责矩阵
 

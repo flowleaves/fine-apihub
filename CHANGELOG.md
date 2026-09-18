@@ -12,15 +12,25 @@ All notable changes to this project are documented in this file.
   - 通知渠道示例发件人标签统一为 `fine`（`lib/notify.js`，2 处）
 - `package.json` 版本号 `2.2.0` → `2.3.1`（与 CHANGELOG 对齐）；`description` 补品牌前缀；新增 `author: "fine"`
 
+### Removed
+- **删除「消耗月历」页面及其专用后端**（无消费者的死代码）：
+  - `app/(dashboard)/calendar/page.tsx`（页面）与侧栏菜单项
+  - `GET /api/calendar` 路由、`lib/providers.js::queryDailyCost` / `chunkRange` / `newApiDailyCost` / `sub2ApiDailyCost`、对应的 5 项测试
+  - 上游接口的**实测约束没有丢**：已固化到 `spec/ARCHITECTURE.md` §4.1（new-api 小时粒度 + 跨度 ≤1 个月的硬限制 + 约 20 天保留；Sub2API `snapshot-v2` 日/时行与 `actual_cost` 口径 + 约 23~30 天保留；`api-keys-usage` 不带时间窗 → 拿不到按 Key 的按日）
+  - 「每日消耗」需求改由「落库方案」承接：`usage_points` + `GET /api/usage/daily`
+
 ### Chore
 - **新增 `npm run db:backup`**（`db/backup.js`）：把 `db/pool.js::backupTo()` 的一致在线备份能力接出 CLI
   - 此前该 API 被 README / `spec/DATA-MODEL.md` 推荐为「WAL 模式下的正确备份方式」，但**没有任何入口能调用**（死代码）
   - 默认输出 `data/fine-apihub-backup-<UTC 时间戳>.db`，支持指定路径；`DB_DRIVER=mysql` 时拒绝执行（改用 `mysqldump`）
+- **新增 Windows 一键启动 `start.bat`**：检查 Node → 装依赖 → 初始化库 → 首次构建 → 启动并开浏览器（`--rebuild` / `--port N`）
+  - 刻意纯 ASCII：cmd.exe 按 OEM 代码页解析 .bat，含中文的 UTF-8 批处理会被读坏
+- **文档数字校正**：端点数 `25` → `26`（新增 `/api/usage/daily`）、测试项数 `45` → `59`（spec/README、README、AGENTS 三处）
 - **品牌统一为 `fine`**：界面标题 / 登录页 / 侧边栏 / 关于页 / 页面 metadata / PWA manifest / 日报邮件页脚 / 测试通知 / Bark 分组 / Webhook `source` / 启动横幅 / `package.json` description，全部由 `FINE-APIHUB` 改为 `fine`
   - 保留的技术标识符（非展示品牌，改动无收益且有副作用）：`data/fine-apihub.db`（库文件名）、`ghcr.io/flowleaves/fine-apihub`（镜像/仓库名）、`package.json.name`、Service Worker 缓存名、SMTP `EHLO`/`Message-ID` 域标签
 - **`LICENSE` 版权归属改为 `Copyright (c) 2026 fine`**
 - **文档路径修正**：`spec/ARCHITECTURE.md` 架构图把 `db/store.js`、`db/history.js` 误写为 `lib/`；站点类型数量 `4 种` 更正为 `5 种`（与 `STATION_TYPES` 一致）
-- `README.md` 目录结构补齐 `deploy/`、`tools/`、`AGENTS.md`
+- `README.md` 目录结构补齐 `deploy/`、`tools/`、`db/usage.js`、`start.bat`、`AGENTS.md`
 - 删除空目录残留 `docs/`、`.github/`（Docker CI 移除后遗留，未被 git 跟踪）
 
 ### Security
