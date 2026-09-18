@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [2.3.1] - 2026-09-14 - 品牌标识符收尾
 
+### Added
+- **中转站页：每个站点一键跳转官网**（`app/(dashboard)/stations/page.tsx`）
+  - 站点行操作区新增「官网」按钮（链图标），新标签页打开该站 `baseUrl`
+  - 仅当 `baseUrl` 是合法 `http(s)` 时才渲染（`homeUrl()` 拒绝空值 / 非法值 / 伪协议如 `javascript:`）；
+    固定成本站可以不填地址 → 自动不显示
+  - 外链安全：`target="_blank"` + `rel="noopener noreferrer"`（防 `window.opener` 反向控制），
+    并复用 antd `Button` 的 `href` 而非 `window.open`，保留原生中键/右键行为
+
 ### Branding
 - 清理代码内历史标识符（项目已更名为 `fine-apihub`，仓库 `flowleaves/fine-apihub`）：
   - 会话 Cookie 名 `rm_session` → `fa_session`

@@ -24,6 +24,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   CloseOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import TrendModal from "../trend-modal";
 import LastRefreshed from "../last-refreshed";
@@ -34,6 +35,19 @@ import { api, cny, usd, rateOf, fmtTokens, fmtEta, statusOf } from "../../../lib
 const PLATE: Record<string, string> = { newapi: "NA", "newapi-key": "KEY", sub2api: "S2", "sub2api-password": "S2" };
 // 语义色（antd 色板值，两种主题下都可读）；中性色一律走 token
 const COLOR = { warn: "#faad14", danger: "#ff4d4f" };
+
+// 站点官网地址：只接受 http/https（避免 javascript: 之类的伪协议被当成链接打开）；
+// 返回 null 表示该站没有可用官网地址（例如固定成本站可以不填地址）
+function homeUrl(baseUrl: any): string | null {
+  const raw = String(baseUrl || "").trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
 
 function relTime(iso: any) {
   if (!iso) return "从未";
@@ -127,6 +141,8 @@ function StationRow(props: {
   const { s, settings, types, etaDaysRule, refreshing, onTrend, onRefresh, onEdit, onDelete } = props;
   const { token } = theme.useToken();
   const typeLabel = (v: string) => types.find((t) => t.value === v)?.label || v;
+  // 官网跳转：仅当站点地址是合法 http(s) 才显示按钮（固定成本站可能压根没填地址）
+  const home = homeUrl(s.baseUrl);
   const rowStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
@@ -202,6 +218,16 @@ function StationRow(props: {
           <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{expiredAll ? "已到期" : "每天"}</div>
         </div>
         <Space size={2} style={{ flexShrink: 0 }}>
+          {home ? (
+            <Button
+              type="text"
+              icon={<LinkOutlined />}
+              title="打开官网"
+              href={home}
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          ) : null}
           <Button type="text" icon={<EditOutlined />} title="编辑" onClick={() => onEdit(s)} />
           <Button type="text" danger icon={<DeleteOutlined />} title="删除" onClick={() => onDelete(s)} />
         </Space>
@@ -276,6 +302,16 @@ function StationRow(props: {
         </div>
       </div>
       <Space size={2} style={{ flexShrink: 0 }}>
+        {home ? (
+          <Button
+            type="text"
+            icon={<LinkOutlined />}
+            title="打开官网"
+            href={home}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        ) : null}
         <Button type="text" icon={<ReloadOutlined />} title="刷新" loading={refreshing} onClick={() => onRefresh(s)} />
         <Button type="text" icon={<EditOutlined />} title="编辑" onClick={() => onEdit(s)} />
         <Button type="text" danger icon={<DeleteOutlined />} title="删除" onClick={() => onDelete(s)} />
